@@ -1,0 +1,19 @@
+{
+  "name": "negative25",
+  "private": true,
+  "packageManager": "pnpm@11.19.0",
+  "scripts": {
+    "dev": "pnpm -r --if-present dev",
+    "build": "pnpm -r build",
+    "lint": "pnpm -r --if-present lint",
+    "test": "pnpm -r test",
+    "typecheck": "pnpm -r typecheck",
+    "db:migrate": "pnpm --filter @negative25/api db:migrate",
+    "test:e2e": "playwright test",
+    "test:visual": "playwright test --config=playwright.visual.config.ts"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.49.1",
+    "typescript": "^5.7.2"
+  }
+}

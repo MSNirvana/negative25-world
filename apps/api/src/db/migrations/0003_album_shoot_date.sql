@@ -1,0 +1,3 @@
+ALTER TABLE albums ADD COLUMN IF NOT EXISTS shoot_date DATE;
+ALTER TABLE albums DROP CONSTRAINT IF EXISTS albums_workspace_slug_unique;
+ALTER TABLE albums DROP COLUMN IF EXISTS slug;

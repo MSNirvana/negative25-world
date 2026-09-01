@@ -1,0 +1,2 @@
+<template><div class="loading" aria-live="polite"><span></span><span></span><span></span></div></template>
+<style scoped>.loading { display: flex; gap: 6px; justify-content: center; padding: 100px 0; }.loading span { animation: pulse 1.1s ease-in-out infinite; background: var(--muted); border-radius: 50%; height: 7px; opacity: .45; width: 7px; }.loading span:nth-child(2) { animation-delay: .15s; }.loading span:nth-child(3) { animation-delay: .3s; } @keyframes pulse { 50% { opacity: 1; transform: translateY(-3px); } }</style>

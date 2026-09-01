@@ -1,0 +1,86 @@
+:root {
+  color-scheme: dark;
+  --paper: #0f0f10;
+  --surface: #171719;
+  --surface-soft: #242426;
+  --ink: #f2f2f0;
+  --muted: #929296;
+  --line: rgba(255, 255, 255, .12);
+  --accent: #b6a78f;
+  --accent-deep: #e5dbca;
+  --shadow: 0 16px 38px rgba(0, 0, 0, .38);
+  --radius: 2px;
+  --max-width: 1080px;
+  --bar-height: 48px;
+  --header-height: 48px;
+  --header-top: 32px;
+  --header-bottom: 20px;
+  --map-paper: #1b1b1c;
+  --map-surface: rgba(23, 23, 25, .94);
+  --map-surface-soft: #242426;
+  --map-ink: #f2f2ec;
+  --map-muted: #a3a8a9;
+  --map-line: rgba(255, 255, 255, .14);
+  --map-control: rgba(24, 24, 25, .88);
+  --map-control-hover: rgba(52, 52, 53, .96);
+  --map-marker: #d1d5ca;
+  --map-marker-halo: rgba(210, 215, 205, .14);
+  --map-marker-halo-active: rgba(239, 239, 229, .3);
+  --map-cluster: rgba(225, 229, 219, .88);
+  --map-cluster-ink: #252627;
+  --map-header-ink: #d2d8d7;
+}
+
+:root[data-theme='paper'] {
+  color-scheme: light;
+  --paper: #f6f5f1;
+  --surface: #ffffff;
+  --surface-soft: #ebeae4;
+  --ink: #252724;
+  --muted: #73766f;
+  --line: rgba(37, 39, 36, .16);
+  --accent: #9a8164;
+  --accent-deep: #6d5741;
+  --shadow: 0 16px 38px rgba(51, 48, 41, .16);
+  --map-paper: #f6f5f1;
+  --map-surface: rgba(255, 255, 255, .95);
+  --map-surface-soft: #ebeae4;
+  --map-ink: #252724;
+  --map-muted: #73766f;
+  --map-line: rgba(37, 39, 36, .16);
+  --map-control: rgba(255, 255, 255, .9);
+  --map-control-hover: rgba(235, 234, 228, .98);
+  --map-marker: #6d5741;
+  --map-marker-halo: rgba(154, 129, 100, .15);
+  --map-marker-halo-active: rgba(154, 129, 100, .28);
+  --map-cluster: rgba(154, 129, 100, .9);
+  --map-cluster-ink: #ffffff;
+  --map-header-ink: #4d5657;
+}
+
+:root[data-theme='mist'] {
+  color-scheme: light;
+  --paper: #e9eef0;
+  --surface: #f7f9fa;
+  --surface-soft: #dce5e8;
+  --ink: #1e292e;
+  --muted: #6c7a80;
+  --line: rgba(30, 41, 46, .16);
+  --accent: #6c929b;
+  --accent-deep: #3f6e79;
+  --shadow: 0 16px 38px rgba(33, 52, 59, .16);
+  --map-paper: #e9eef0;
+  --map-surface: rgba(247, 249, 250, .95);
+  --map-surface-soft: #dce5e8;
+  --map-ink: #1e292e;
+  --map-muted: #6c7a80;
+  --map-line: rgba(30, 41, 46, .16);
+  --map-control: rgba(247, 249, 250, .9);
+  --map-control-hover: rgba(220, 229, 232, .98);
+  --map-marker: #3f6e79;
+  --map-marker-halo: rgba(108, 146, 155, .15);
+  --map-marker-halo-active: rgba(108, 146, 155, .28);
+  --map-cluster: rgba(108, 146, 155, .9);
+  --map-cluster-ink: #ffffff;
+  --map-header-ink: #3f6e79;
+}

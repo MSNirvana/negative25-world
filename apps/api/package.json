@@ -1,0 +1,32 @@
+{
+  "name": "@negative25/api",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "dev": "tsx watch src/server.ts",
+    "build": "tsc -p tsconfig.json --noEmit false --outDir dist",
+    "lint": "tsc -p tsconfig.json --noEmit",
+    "test": "vitest run",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "db:migrate": "tsx src/db/migrate.ts"
+  },
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.750.0",
+    "@aws-sdk/s3-request-presigner": "^3.750.0",
+    "@negative25/contracts": "workspace:*",
+    "@negative25/utils": "workspace:*",
+    "argon2": "^0.41.1",
+    "bullmq": "^5.40.3",
+    "drizzle-orm": "^0.38.3",
+    "fastify": "^5.2.1",
+    "jose": "^6.0.8",
+    "postgres": "^3.4.5",
+    "zod": "^3.24.1"
+  },
+  "devDependencies": {
+    "@types/node": "^22.10.2",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2",
+    "vitest": "^2.1.8"
+  }
+}

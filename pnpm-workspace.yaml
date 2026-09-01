@@ -1,0 +1,11 @@
+packages:
+  - apps/*
+  - packages/*
+onlyBuiltDependencies:
+  - esbuild
+allowBuilds:
+  argon2: true
+  esbuild: true
+  msgpackr-extract: true
+  sharp: true
+  vue-demi: true
