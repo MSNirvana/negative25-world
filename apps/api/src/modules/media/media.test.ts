@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '@negative25/utils';
 import { calculatePartSize, MediaService } from './media.service.js';
-import { MemoryStorageAdapter } from './storage.js';
+import { MemoryStorageAdapter, S3StorageAdapter } from './storage.js';
 
 const editor = { userId: 'user-1', workspaceId: 'space-1', role: 'editor' as const };
 
@@ -11,6 +11,12 @@ describe('media service', () => {
     const size = calculatePartSize(1024 * 1024 * 1024 * 1024);
     expect(size % (8 * 1024 * 1024)).toBe(0);
     expect(Math.ceil((1024 * 1024 * 1024 * 1024) / size)).toBeLessThanOrEqual(9_000);
+  });
+
+  it('adds a public path prefix after signing against the public host', async () => {
+    const storage = new S3StorageAdapter({ endpoint: 'http://minio:9000', publicEndpoint: 'https://n25.world/storage', bucket: 'negative25', region: 'us-east-1', accessKeyId: 'key', secretAccessKey: 'secret' });
+    const url = await storage.createUploadUrl({ key: 'workspaces/space-1/uploads/file.jpg', contentType: 'image/jpeg' });
+    expect(new URL(url).pathname).toBe('/storage/negative25/workspaces/space-1/uploads/file.jpg');
   });
 
   it('creates scoped upload URLs and completes an upload after metadata checks', async () => {

@@ -77,10 +77,13 @@ export class S3StorageAdapter implements StorageAdapter {
   private readonly signingClient: S3Client;
   private readonly bucket: string;
   private readonly publicBaseUrl: string;
+  private readonly publicPathPrefix: string;
 
   constructor(options: S3StorageOptions) {
     this.bucket = options.bucket;
     this.publicBaseUrl = options.publicBaseUrl ?? `${options.endpoint.replace(/\/$/, '')}/${options.bucket}`;
+    const publicEndpoint = new URL(options.publicEndpoint ?? options.endpoint);
+    this.publicPathPrefix = publicEndpoint.pathname.replace(/\/$/, '');
     this.client = new S3Client({
       endpoint: options.endpoint,
       region: options.region,
@@ -88,7 +91,7 @@ export class S3StorageAdapter implements StorageAdapter {
       credentials: { accessKeyId: options.accessKeyId, secretAccessKey: options.secretAccessKey },
     });
     this.signingClient = new S3Client({
-      endpoint: options.publicEndpoint ?? options.endpoint,
+      endpoint: publicEndpoint.origin,
       region: options.region,
       forcePathStyle: true,
       credentials: { accessKeyId: options.accessKeyId, secretAccessKey: options.secretAccessKey },
@@ -96,12 +99,13 @@ export class S3StorageAdapter implements StorageAdapter {
   }
 
   async createUploadUrl(input: UploadUrlInput): Promise<string> {
-    return getSignedUrl(this.signingClient, new PutObjectCommand({
+    const url = await getSignedUrl(this.signingClient, new PutObjectCommand({
       Bucket: this.bucket,
       Key: input.key,
       ContentType: input.contentType,
       // Explicitly omit ACLs. Bucket policy controls public preview access.
     }), { expiresIn: input.expiresInSeconds ?? 900 });
+    return this.addPublicPath(url);
   }
 
   async createMultipartUpload(input: MultipartUploadInput): Promise<{ uploadId: string }> {
@@ -111,12 +115,13 @@ export class S3StorageAdapter implements StorageAdapter {
   }
 
   async createPartUploadUrl(input: MultipartPartUrlInput): Promise<string> {
-    return getSignedUrl(this.signingClient, new UploadPartCommand({
+    const url = await getSignedUrl(this.signingClient, new UploadPartCommand({
       Bucket: this.bucket,
       Key: input.key,
       UploadId: input.uploadId,
       PartNumber: input.partNumber,
     }), { expiresIn: input.expiresInSeconds ?? 900 });
+    return this.addPublicPath(url);
   }
 
   async listParts(key: string, uploadId: string): Promise<MultipartPart[]> {
@@ -158,7 +163,8 @@ export class S3StorageAdapter implements StorageAdapter {
   }
 
   async getSignedDownloadUrl(key: string, expiresInSeconds = 300): Promise<string> {
-    return getSignedUrl(this.signingClient, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: expiresInSeconds });
+    const url = await getSignedUrl(this.signingClient, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: expiresInSeconds });
+    return this.addPublicPath(url);
   }
 
   getPublicUrl(key: string): string { return `${this.publicBaseUrl}/${key.split('/').map(encodeURIComponent).join('/')}`; }
@@ -172,6 +178,13 @@ export class S3StorageAdapter implements StorageAdapter {
   async listPrefix(prefix: string): Promise<StoredObject[]> {
     const result = await this.client.send(new ListObjectsV2Command({ Bucket: this.bucket, Prefix: prefix }));
     return (result.Contents ?? []).map((item) => ({ key: item.Key ?? '', size: Number(item.Size ?? 0), contentType: 'application/octet-stream', etag: item.ETag })).filter((item) => item.key);
+  }
+
+  private addPublicPath(url: string): string {
+    if (!this.publicPathPrefix) return url;
+    const parsed = new URL(url);
+    parsed.pathname = `${this.publicPathPrefix}${parsed.pathname}`;
+    return parsed.toString();
   }
 }
 
