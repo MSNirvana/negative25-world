@@ -9,8 +9,8 @@ import { useLocale } from '../../i18n';
 const router = useRouter();
 const route = useRoute();
 const session = useSessionStore();
-const identifier = ref('negative25');
-const password = ref('negative25');
+const identifier = ref('');
+const password = ref('');
 const busy = ref(false);
 const { t } = useLocale();
 
