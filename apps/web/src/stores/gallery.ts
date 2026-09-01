@@ -18,6 +18,9 @@ export type GalleryPhoto = {
   image: string;
   fullImage: string;
   tone: string;
+  /** Keep raw location metadata separate from the formatted display label. */
+  locationName?: string;
+  locationRegion?: string;
   camera: string;
   lens: string;
   focalLength: string;
@@ -88,7 +91,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     error.value = null;
     try {
       if (nextMode === 'location' && selectedLocation.value && !locationPhotos.value.length) {
-        const catalog = await fetchGallery('featured', undefined, controller.signal, undefined, spaceSlug.value, authToken.value);
+        const catalog = await fetchGallery('featured', undefined, controller.signal, undefined, spaceSlug.value, authToken.value, 100);
         if (controller.signal.aborted) return;
         locationPhotos.value = catalog.photos.map(toGalleryPhoto);
       }
@@ -133,6 +136,8 @@ export function toGalleryPhoto(photo: PhotoSummary): GalleryPhoto {
   const metadata = photo.metadata as Record<string, unknown>;
   const coordinates = coordinatesFrom(metadata);
   const standardName = photo.location?.name ?? (coordinates ? `${coordinates.latitude.toFixed(5)}, ${coordinates.longitude.toFixed(5)}` : undefined);
+  const locationName = photo.location?.name ?? stringValue(metadata.locationName);
+  const locationRegion = stringValue(metadata.displayRegion);
   return {
     id: photo.id,
     title: photo.title,
@@ -148,6 +153,8 @@ export function toGalleryPhoto(photo: PhotoSummary): GalleryPhoto {
     image: photo.thumbnail.url,
     fullImage: photo.media.find((media) => media.kind === 'large')?.url ?? photo.media.find((media) => media.kind === 'preview')?.url ?? photo.thumbnail.url,
     tone: toneFor(photo.id),
+    locationName: locationName || undefined,
+    locationRegion: locationRegion || undefined,
     camera: cameraField(metadata),
     lens: textField(metadata.lens),
     focalLength: formatFocalLength(metadata.focalLength),
@@ -159,6 +166,10 @@ export function toGalleryPhoto(photo: PhotoSummary): GalleryPhoto {
     coordinates,
     altitude: numberFrom(metadata.altitude),
   };
+}
+
+function stringValue(value: unknown): string {
+  return typeof value === 'string' ? value.trim() : '';
 }
 
 function coordinatesFrom(metadata: Record<string, unknown>): PhotoCoordinates | undefined {

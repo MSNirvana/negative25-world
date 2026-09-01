@@ -95,4 +95,15 @@ describe('gallery store', () => {
     expect(withoutPrefix.location).toBe('鹳雀楼');
     expect(legacy.location).toBe('永济市鹳雀楼景区');
   });
+
+  it('keeps region metadata available when the display prefix is disabled', () => {
+    const photo = toGalleryPhoto({
+      id: 'region-metadata-photo', spaceSlug: 'primary', title: 'Region metadata', description: '', capturedAt: '2026-01-02T03:04:05.000Z', rating: null, aspectRatio: 1,
+      thumbnail: { kind: 'thumbnail', url: 'https://example.com/thumb.jpg', width: 300, height: 300, format: 'jpeg' }, media: [], location: { id: 'yanmen', name: '雁门关景区' },
+      metadata: { locationName: '雁门关景区', displayAddress: '雁门关', displayRegion: '山西省', displayRegionEnabled: false },
+    });
+    expect(photo.location).toBe('雁门关');
+    expect(photo.locationName).toBe('雁门关景区');
+    expect(photo.locationRegion).toBe('山西省');
+  });
 });

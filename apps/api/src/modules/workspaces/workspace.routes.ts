@@ -71,7 +71,10 @@ export function filterPhotosByLocation<T extends { location?: { id: string; name
   const region = CHINA_REGION_DEFINITIONS.find((item) => normalizeLocationText(item.id) === normalizedQuery || locationMatchesRegion(query, item));
   const querySlug = slugifyLocation(query);
   return photos.filter((photo) => {
-    const candidates = [photo.location?.name, photo.location?.id, typeof photo.metadata?.locationName === 'string' ? photo.metadata.locationName : undefined].filter((value): value is string => Boolean(value));
+    const metadataCandidates = ['locationName', 'displayRegion', 'displayAddress']
+      .map((field) => photo.metadata?.[field])
+      .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()));
+    const candidates = [photo.location?.name, photo.location?.id, ...metadataCandidates].filter((value): value is string => Boolean(value));
     if (region) return candidates.some((value) => locationMatchesRegion(value, region));
     return candidates.some((value) => normalizeLocationText(value).includes(normalizedQuery) || slugifyLocation(value).includes(querySlug));
   });

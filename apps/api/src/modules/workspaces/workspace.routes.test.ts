@@ -18,8 +18,9 @@ describe('gallery location filtering', () => {
       { id: 'yungang', location: { id: 'photo-yungang-location', name: '云冈石窟' }, metadata: {} },
       { id: 'wutai', location: { id: 'photo-wutai-location', name: '五台山风景名胜区' }, metadata: {} },
       { id: 'hengshan', location: { id: 'photo-hengshan-location', name: '北岳恒山' }, metadata: {} },
+      { id: 'yanmen', location: null, metadata: { locationName: '雁门关景区', displayRegion: '山西省', displayAddress: '雁门关' } },
     ];
-    expect(filterPhotosByLocation(shanxiPhotos, 'shanxi').map((photo) => photo.id)).toEqual(['yungang', 'wutai', 'hengshan']);
+    expect(filterPhotosByLocation(shanxiPhotos, 'shanxi').map((photo) => photo.id)).toEqual(['yungang', 'wutai', 'hengshan', 'yanmen']);
   });
 
   it('matches normalized location slugs for other regions', () => {

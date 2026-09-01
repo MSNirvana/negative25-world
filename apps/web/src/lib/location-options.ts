@@ -12,7 +12,7 @@ export type LocationOption = {
   available: boolean;
 };
 
-type LocationPhoto = Pick<GalleryPhoto, 'location' | 'locationId'>;
+type LocationPhoto = Pick<GalleryPhoto, 'location' | 'locationId' | 'locationName' | 'locationRegion'>;
 
 export function buildLocationOptions(photos: readonly LocationPhoto[]): LocationOption[] {
   const china = CHINA_REGION_DEFINITIONS.map((region) => {
@@ -23,7 +23,7 @@ export function buildLocationOptions(photos: readonly LocationPhoto[]): Location
   const otherByKey = new Map<string, { label: string; count: number }>();
   for (const photo of photos) {
     const label = photo.location.trim();
-    if (!isUsefulLocation(label) || regionForLocation(label) || isChinaLocation(label)) continue;
+    if (!isUsefulLocation(label) || regionForLocation(label) || regionForLocation(photo.locationRegion ?? '') || isChinaLocation(label)) continue;
     const key = normalizeLocationText(label);
     const current = otherByKey.get(key);
     if (current) current.count += 1;
@@ -65,7 +65,8 @@ function regionOption(region: ChinaRegionDefinition, count: number): LocationOpt
 }
 
 function photoLocationMatchesRegion(photo: LocationPhoto, region: ChinaRegionDefinition): boolean {
-  return isUsefulLocation(photo.location) && (locationMatchesRegion(photo.location, region) || region.aliases.some((alias) => photo.locationId?.toLocaleLowerCase().includes(normalizeLocationText(alias))));
+  const candidates = [photo.location, photo.locationName, photo.locationRegion].filter((value): value is string => Boolean(value && isUsefulLocation(value)));
+  return candidates.some((value) => locationMatchesRegion(value, region)) || region.aliases.some((alias) => photo.locationId?.toLocaleLowerCase().includes(normalizeLocationText(alias)));
 }
 
 function isChinaLocation(value: string): boolean {

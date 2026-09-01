@@ -37,4 +37,12 @@ describe('location options', () => {
     expect(options.filter((option) => option.group === 'other')).toHaveLength(0);
     expect(filterPhotosByLocation(landmarkPhotos, 'shanxi')).toHaveLength(3);
   });
+
+  it('uses the raw region when a display address omits the province prefix', () => {
+    const photosWithHiddenPrefix = [{ location: '雁门关', locationId: 'photo-yanmen', locationName: '雁门关景区', locationRegion: '山西省' }];
+    const options = buildLocationOptions(photosWithHiddenPrefix);
+    expect(options.find((option) => option.id === 'shanxi')).toMatchObject({ available: true, count: 1 });
+    expect(options.filter((option) => option.group === 'other')).toHaveLength(0);
+    expect(filterPhotosByLocation(photosWithHiddenPrefix, 'shanxi')).toHaveLength(1);
+  });
 });

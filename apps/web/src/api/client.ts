@@ -18,11 +18,12 @@ export function configureAuthSession(bridge: AuthSessionBridge | null): void {
   authSessionBridge = bridge;
 }
 
-export async function fetchGallery(mode: string, cursor?: string, signal?: AbortSignal, location?: string, spaceSlug = 'primary', token?: string | null): Promise<GalleryResponse> {
+export async function fetchGallery(mode: string, cursor?: string, signal?: AbortSignal, location?: string, spaceSlug = 'primary', token?: string | null, limit?: number): Promise<GalleryResponse> {
   if (!apiBaseUrl) throw new Error('API is not configured');
   const query = new URLSearchParams({ mode });
   if (cursor) query.set('cursor', cursor);
   if (location) query.set('location', location);
+  if (limit !== undefined) query.set('limit', String(limit));
   if (token) return authorized(`/spaces/${encodeURIComponent(spaceSlug)}/photos?${query}`, token, { signal }, (value) => PhotoListResponseSchema.parse(value));
   const response = await fetch(`${apiBaseUrl}/spaces/${encodeURIComponent(spaceSlug)}/photos?${query}`, { signal, headers: { 'x-request-id': crypto.randomUUID() } });
   if (!response.ok) throw new Error(`Gallery request failed (${response.status})`);
