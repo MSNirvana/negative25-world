@@ -178,8 +178,19 @@ export async function createImportBatch(spaceSlug: string, sourceKeys: string[],
 }
 
 type UploadReservation = { uploadId: string; key: string; url: string; expiresIn: number };
+type MultipartSession = { id: string; key: string; storageUploadId: string; partSize: number; partCount: number; expiresAt: string; status: string };
+type MultipartPart = { partNumber: number; etag: string; size: number };
+type MultipartStatus = { upload: MultipartSession; parts: MultipartPart[] };
+export type UploadProgress = { uploadedBytes: number; totalBytes: number; phase: 'uploading' | 'completing' };
+export type UploadOptions = { signal?: AbortSignal; onProgress?: (progress: UploadProgress) => void };
 
-export async function uploadPhoto(spaceSlug: string, file: File, token: string): Promise<string> {
+const multipartThreshold = 32 * 1024 * 1024;
+const partConcurrency = 4;
+const maxPartRetries = 3;
+const resumeStorageKey = 'negative25.multipart-uploads';
+
+export async function uploadPhoto(spaceSlug: string, file: File, token: string, options: UploadOptions = {}): Promise<string> {
+  if (file.size >= multipartThreshold) return uploadMultipartPhoto(spaceSlug, file, token, options);
   const contentType = contentTypeFor(file);
   const reservation = await authorized<UploadReservation>('/media/upload-url', token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ spaceSlug, filename: file.name, contentType, byteSize: file.size }) }, (value) => value as UploadReservation);
   if (reservation.url.startsWith('memory://')) {
@@ -195,13 +206,141 @@ export async function uploadPhoto(spaceSlug: string, file: File, token: string):
       },
       body,
     }, (value) => value as { key: string });
+    options.onProgress?.({ uploadedBytes: file.size, totalBytes: file.size, phase: 'uploading' });
     return reservation.key;
   }
-  const upload = await fetch(reservation.url, { method: 'PUT', headers: { 'content-type': contentType }, body: file });
-  if (!upload.ok) throw new Error(`Upload failed (${upload.status})`);
+  await putWithRetry(reservation.url, file, { 'content-type': contentType }, options.signal, 'Upload failed');
+  options.onProgress?.({ uploadedBytes: file.size, totalBytes: file.size, phase: 'uploading' });
   await authorized('/media/complete', token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ spaceSlug, key: reservation.key, expectedByteSize: file.size, expectedContentType: contentType }) }, (value) => value);
   return reservation.key;
 }
+
+async function uploadMultipartPhoto(spaceSlug: string, file: File, token: string, options: UploadOptions): Promise<string> {
+  const contentType = contentTypeFor(file);
+  const resume = (await readResumeRecords()).find((record) => record.spaceSlug === spaceSlug && record.name === file.name && record.size === file.size && record.lastModified === file.lastModified && record.type === contentType);
+  let status: MultipartStatus | undefined;
+  if (resume) {
+    try { status = await getMultipartStatus(resume.session.id, spaceSlug, token); } catch { await removeResumeRecord(resume.session.id); }
+  }
+  if (!status) {
+    const session = await authorized<MultipartSession>('/media/multipart/initiate', token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ spaceSlug, filename: file.name, contentType, byteSize: file.size }) }, (value) => value as MultipartSession);
+    status = { upload: session, parts: [] };
+    await saveResumeRecord({ spaceSlug, name: file.name, size: file.size, lastModified: file.lastModified, type: contentType, session });
+  }
+  if (status.upload.status === 'completed') { await removeResumeRecord(status.upload.id); return status.upload.key; }
+  const completed = new Map(status.parts.map((part) => [part.partNumber, part]));
+  let uploadedBytes = [...completed.values()].reduce((sum, part) => sum + part.size, 0);
+  options.onProgress?.({ uploadedBytes, totalBytes: file.size, phase: 'uploading' });
+  const missing = Array.from({ length: status.upload.partCount }, (_, index) => index + 1).filter((partNumber) => !completed.has(partNumber));
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < missing.length) {
+      throwIfAborted(options.signal);
+      const partNumber = missing[cursor++];
+      const start = (partNumber - 1) * status!.upload.partSize;
+      const end = Math.min(file.size, start + status!.upload.partSize);
+      const body = file.slice(start, end);
+      let etag = '';
+      let lastError: unknown;
+      for (let attempt = 0; attempt < maxPartRetries; attempt += 1) {
+        try {
+          const partUrl = await requestMultipartPartUrl(status!.upload.id, spaceSlug, partNumber, token);
+          const response = await putWithRetry(partUrl, body, undefined, options.signal, `Part ${partNumber} upload failed`);
+          etag = response.headers.get('etag')?.trim() ?? '';
+          if (!etag) throw new Error(`Part ${partNumber} response did not include an ETag`);
+          break;
+        } catch (error) {
+          lastError = error;
+          if (attempt + 1 < maxPartRetries) await delay(300 * 2 ** attempt, options.signal);
+        }
+      }
+      if (!etag) throw lastError instanceof Error ? lastError : new Error(`Part ${partNumber} upload failed`);
+      completed.set(partNumber, { partNumber, etag, size: body.size });
+      uploadedBytes += body.size;
+      options.onProgress?.({ uploadedBytes, totalBytes: file.size, phase: 'uploading' });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(partConcurrency, missing.length || 1) }, () => worker()));
+  throwIfAborted(options.signal);
+  options.onProgress?.({ uploadedBytes: file.size, totalBytes: file.size, phase: 'completing' });
+  await authorized(`/media/multipart/${encodeURIComponent(status.upload.id)}/complete`, token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ spaceSlug, parts: [...completed.values()].sort((a, b) => a.partNumber - b.partNumber).map(({ partNumber, etag }) => ({ partNumber, etag })) }) }, (value) => value);
+  await removeResumeRecord(status.upload.id);
+  return status.upload.key;
+}
+
+async function getMultipartStatus(id: string, spaceSlug: string, token: string): Promise<MultipartStatus> {
+  return authorized<MultipartStatus>(`/media/multipart/${encodeURIComponent(id)}/status?spaceSlug=${encodeURIComponent(spaceSlug)}`, token, {}, (value) => value as MultipartStatus);
+}
+
+async function requestMultipartPartUrl(id: string, spaceSlug: string, partNumber: number, token: string): Promise<string> {
+  const result = await authorized<{ url: string }>(`/media/multipart/${encodeURIComponent(id)}/part-url`, token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ spaceSlug, partNumber }) }, (value) => value as { url: string });
+  return result.url;
+}
+
+async function putWithRetry(url: string, body: BodyInit, headers: HeadersInit | undefined, signal: AbortSignal | undefined, message: string): Promise<Response> {
+  let lastError: unknown;
+  for (let attempt = 0; attempt < maxPartRetries; attempt += 1) {
+    try {
+      throwIfAborted(signal);
+      const response = await fetch(url, { method: 'PUT', headers, body, signal });
+      if (!response.ok) throw new Error(`${message} (${response.status})`);
+      return response;
+    } catch (error) {
+      lastError = error;
+      if (signal?.aborted) throw error;
+      if (attempt + 1 < maxPartRetries) await delay(300 * 2 ** attempt, signal);
+    }
+  }
+  throw lastError instanceof Error ? lastError : new Error(message);
+}
+
+function throwIfAborted(signal?: AbortSignal): void { if (signal?.aborted) throw new DOMException('Upload was cancelled', 'AbortError'); }
+function delay(ms: number, signal?: AbortSignal): Promise<void> { return new Promise((resolve, reject) => { const timer = setTimeout(resolve, ms); signal?.addEventListener('abort', () => { clearTimeout(timer); reject(new DOMException('Upload was cancelled', 'AbortError')); }, { once: true }); }); }
+
+type ResumeRecord = { spaceSlug: string; name: string; size: number; lastModified: number; type: string; session: MultipartSession };
+const resumeDatabaseName = 'negative25-upload-state';
+const resumeStoreName = 'sessions';
+async function readResumeRecords(): Promise<ResumeRecord[]> {
+  const database = await openResumeDatabase();
+  if (!database) return readLocalResumeRecords();
+  return new Promise((resolve) => {
+    const request = database.transaction(resumeStoreName, 'readonly').objectStore(resumeStoreName).getAll();
+    request.onsuccess = () => { database.close(); resolve(Array.isArray(request.result) ? request.result as ResumeRecord[] : []); };
+    request.onerror = () => { database.close(); resolve(readLocalResumeRecords()); };
+  });
+}
+async function saveResumeRecord(record: ResumeRecord): Promise<void> {
+  const database = await openResumeDatabase();
+  if (!database) { saveLocalResumeRecord(record); return; }
+  return new Promise((resolve) => {
+    const transaction = database.transaction(resumeStoreName, 'readwrite');
+    transaction.objectStore(resumeStoreName).put(record, record.session.id);
+    transaction.oncomplete = () => { database.close(); resolve(); };
+    transaction.onerror = () => { database.close(); saveLocalResumeRecord(record); resolve(); };
+  });
+}
+async function removeResumeRecord(id: string): Promise<void> {
+  const database = await openResumeDatabase();
+  if (!database) { removeLocalResumeRecord(id); return; }
+  return new Promise((resolve) => {
+    const transaction = database.transaction(resumeStoreName, 'readwrite');
+    transaction.objectStore(resumeStoreName).delete(id);
+    transaction.oncomplete = () => { database.close(); resolve(); };
+    transaction.onerror = () => { database.close(); removeLocalResumeRecord(id); resolve(); };
+  });
+}
+function openResumeDatabase(): Promise<IDBDatabase | null> {
+  if (typeof indexedDB === 'undefined') return Promise.resolve(null);
+  return new Promise((resolve) => {
+    const request = indexedDB.open(resumeDatabaseName, 1);
+    request.onupgradeneeded = () => { request.result.createObjectStore(resumeStoreName); };
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => resolve(null);
+  });
+}
+function readLocalResumeRecords(): ResumeRecord[] { if (typeof localStorage === 'undefined') return []; try { const value = JSON.parse(localStorage.getItem(resumeStorageKey) ?? '[]'); return Array.isArray(value) ? value as ResumeRecord[] : []; } catch { return []; } }
+function saveLocalResumeRecord(record: ResumeRecord): void { if (typeof localStorage === 'undefined') return; const records = readLocalResumeRecords().filter((item) => item.session.id !== record.session.id); records.push(record); localStorage.setItem(resumeStorageKey, JSON.stringify(records.slice(-20))); }
+function removeLocalResumeRecord(id: string): void { if (typeof localStorage === 'undefined') return; localStorage.setItem(resumeStorageKey, JSON.stringify(readLocalResumeRecords().filter((item) => item.session.id !== id))); }
 
 function contentTypeFor(file: File): string {
   if (file.type) return file.type;

@@ -1,11 +1,18 @@
 import { describe, expect, it } from 'vitest';
 import { ApiError } from '@negative25/utils';
-import { MediaService } from './media.service.js';
+import { calculatePartSize, MediaService } from './media.service.js';
 import { MemoryStorageAdapter } from './storage.js';
 
 const editor = { userId: 'user-1', workspaceId: 'space-1', role: 'editor' as const };
 
 describe('media service', () => {
+  it('calculates multipart sizes without exceeding the S3 part limit', () => {
+    expect(calculatePartSize(32 * 1024 * 1024)).toBe(16 * 1024 * 1024);
+    const size = calculatePartSize(1024 * 1024 * 1024 * 1024);
+    expect(size % (8 * 1024 * 1024)).toBe(0);
+    expect(Math.ceil((1024 * 1024 * 1024 * 1024) / size)).toBeLessThanOrEqual(9_000);
+  });
+
   it('creates scoped upload URLs and completes an upload after metadata checks', async () => {
     const storage = new MemoryStorageAdapter();
     const media = new MediaService(storage);
@@ -44,5 +51,26 @@ describe('media service', () => {
     const completed = await media.uploadContent(editor, { key, expectedByteSize: 4, expectedContentType: 'image/jpeg', body: new Uint8Array([1, 2, 3, 4]) });
     expect(completed.sourceKey).toBe(key);
     await expect(storage.headObject(key)).resolves.toMatchObject({ size: 4, contentType: 'image/jpeg' });
+  });
+
+  it('supports resumable multipart uploads and verifies each part', async () => {
+    const storage = new MemoryStorageAdapter();
+    const media = new MediaService(storage);
+    const upload = await media.initiateMultipart(editor, { filename: 'large.jpg', contentType: 'image/jpeg', byteSize: 8 });
+    expect(upload.partCount).toBe(1);
+    await expect(media.getMultipartStatus(editor, upload.id)).resolves.toMatchObject({ parts: [] });
+    const etag = await storage.putMultipartPart(upload.storageUploadId, 1, new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]));
+    await expect(media.getMultipartStatus(editor, upload.id)).resolves.toMatchObject({ parts: [{ partNumber: 1, size: 8, etag }] });
+    const completed = await media.completeMultipart(editor, upload.id, [{ partNumber: 1, etag }]);
+    expect(completed).toMatchObject({ sourceKey: upload.key, byteSize: 8, status: 'uploaded' });
+    await expect(storage.headObject(upload.key)).resolves.toMatchObject({ size: 8, contentType: 'image/jpeg' });
+  });
+
+  it('rejects incomplete multipart uploads', async () => {
+    const storage = new MemoryStorageAdapter();
+    const media = new MediaService(storage);
+    const upload = await media.initiateMultipart(editor, { filename: 'large.jpg', contentType: 'image/jpeg', byteSize: 8 });
+    const etag = await storage.putMultipartPart(upload.storageUploadId, 1, new Uint8Array([1, 2, 3]));
+    await expect(media.completeMultipart(editor, upload.id, [{ partNumber: 1, etag }])).rejects.toMatchObject({ code: 'UPLOAD_METADATA_MISMATCH' } satisfies Partial<ApiError>);
   });
 });

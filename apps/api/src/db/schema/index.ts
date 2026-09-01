@@ -4,6 +4,7 @@ export * from './workspaces.js';
 export * from './memberships.js';
 export * from './photos.js';
 export * from './media.js';
+export * from './media-uploads.js';
 export * from './albums.js';
 export * from './album-photos.js';
 export * from './equipment.js';

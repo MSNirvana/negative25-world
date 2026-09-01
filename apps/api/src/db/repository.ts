@@ -26,6 +26,25 @@ export type PhotoRecord = { id: string; workspaceId: string; title: string; desc
 export type AlbumRecord = { id: string; workspaceId: string; spaceSlug?: string; title: string; description?: string; shootDate?: string | null; coverPhotoId: string | null; sortOrder: number; photoIds: string[] };
 export type BatchItem = { id: string; sourceKey: string; status: string; checksum?: string; errors: string[]; warnings: string[]; resolvedFields: Record<string, unknown> };
 export type BatchRecord = { id: string; workspaceId: string; actorId: string; status: string; idempotencyKey?: string; items: BatchItem[]; counts: { total: number; completed: number; failed: number }; publishedCount?: number; createdAt?: string };
+export type MediaUploadStatus = 'initiated' | 'completed' | 'aborted' | 'expired';
+export type MediaUploadRecord = {
+  id: string;
+  workspaceId: string;
+  createdBy: string;
+  storageKey: string;
+  storageUploadId: string;
+  filename: string;
+  contentType: string;
+  byteSize: number;
+  checksum?: string | null;
+  partSize: number;
+  partCount: number;
+  status: MediaUploadStatus;
+  expiresAt: Date;
+  completedAt?: Date | null;
+  createdAt?: Date;
+  updatedAt?: Date;
+};
 
 export function isPhotoOwnerOnly(photo: Pick<PhotoRecord, 'ownerOnly' | 'metadata'>): boolean {
   return photo.ownerOnly === true || photo.metadata?.ownerOnly === true;
@@ -79,6 +98,10 @@ export interface AppRepository {
   findBatchByIdempotency(workspaceId: string, key: string): Promise<BatchRecord | undefined>;
   findBatch(id: string, workspaceId: string): Promise<BatchRecord | undefined>;
   saveBatch(batch: BatchRecord): Promise<void>;
+  createMediaUpload(upload: MediaUploadRecord): Promise<MediaUploadRecord>;
+  findMediaUpload(id: string, workspaceId: string): Promise<MediaUploadRecord | undefined>;
+  updateMediaUpload(id: string, workspaceId: string, patch: Partial<Pick<MediaUploadRecord, 'status' | 'completedAt'>>): Promise<MediaUploadRecord | undefined>;
+  listExpiredMediaUploads(now?: Date): Promise<MediaUploadRecord[]>;
 }
 
 export class MemoryRepository implements AppRepository {
@@ -90,6 +113,7 @@ export class MemoryRepository implements AppRepository {
   readonly memberships = new Map<string, MembershipRecord>();
   readonly photos = new Map<string, PhotoRecord>([['primary-photo-1', { id: 'primary-photo-1', workspaceId: PRIMARY_WORKSPACE_ID, title: 'negative25', description: '', published: true, hidden: false, rating: null, spaceSlug: 'primary', capturedAt: '2026-01-02T03:04:05.000Z', aspectRatio: 1.5, thumbnail: { kind: 'thumbnail', url: 'https://cdn.invalid/primary-photo-1.jpg', width: 300, height: 200, format: 'jpeg' }, media: [], location: null, metadata: {} }]]);
   readonly batches = new Map<string, BatchRecord>();
+  readonly mediaUploads = new Map<string, MediaUploadRecord>();
   readonly albums = new Map<string, AlbumRecord>();
   async findUserByEmail(email: string) { return [...this.users.values()].find((user) => user.email === email); }
   async findUserByUsername(username: string) { return [...this.users.values()].find((user) => user.username?.toLowerCase() === username.toLowerCase()); }
@@ -202,6 +226,16 @@ export class MemoryRepository implements AppRepository {
   async findBatchByIdempotency(workspaceId: string, key: string) { return [...this.batches.values()].find((batch) => batch.workspaceId === workspaceId && batch.idempotencyKey === key); }
   async findBatch(id: string, workspaceId: string) { const batch = this.batches.get(id); return batch?.workspaceId === workspaceId ? { ...batch, publishedCount: publishedPhotoCount(batch, this.photos) } : undefined; }
   async saveBatch(batch: BatchRecord) { this.batches.set(batch.id, batch); }
+  async createMediaUpload(upload: MediaUploadRecord) { const stored = { ...upload }; this.mediaUploads.set(upload.id, stored); return { ...stored }; }
+  async findMediaUpload(id: string, workspaceId: string) { const upload = this.mediaUploads.get(id); return upload?.workspaceId === workspaceId ? { ...upload } : undefined; }
+  async updateMediaUpload(id: string, workspaceId: string, patch: Partial<Pick<MediaUploadRecord, 'status' | 'completedAt'>>) {
+    const upload = await this.findMediaUpload(id, workspaceId);
+    if (!upload) return undefined;
+    const updated = { ...upload, ...patch, updatedAt: new Date() };
+    this.mediaUploads.set(id, updated);
+    return { ...updated };
+  }
+  async listExpiredMediaUploads(now = new Date()) { return [...this.mediaUploads.values()].filter((upload) => upload.status === 'initiated' && upload.expiresAt <= now).map((upload) => ({ ...upload })); }
 }
 
 function publishedPhotoCount(batch: BatchRecord, photos: Map<string, PhotoRecord>): number {
@@ -372,6 +406,25 @@ export class PostgresRepository implements AppRepository {
     return { ...rows[0], publishedCount: Number(rows[0].publishedCount ?? 0), items, counts: { total: items.length, completed: items.filter((item) => item.status === 'completed').length, failed: items.filter((item) => item.status === 'failed').length } } as unknown as BatchRecord;
   }
   async saveBatch(batch: BatchRecord) { await this.db`INSERT INTO import_batches (id, workspace_id, actor_id, status, idempotency_key, total_count, completed_count, failed_count) VALUES (${batch.id}, ${batch.workspaceId}, ${batch.actorId}, ${batch.status}, ${batch.idempotencyKey ?? null}, ${batch.counts.total}, ${batch.counts.completed}, ${batch.counts.failed}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, total_count = EXCLUDED.total_count, completed_count = EXCLUDED.completed_count, failed_count = EXCLUDED.failed_count`; for (const item of batch.items) await this.db`INSERT INTO import_items (id, batch_id, source_key, status, checksum, errors, warnings, resolved_fields) VALUES (${item.id}, ${batch.id}, ${item.sourceKey}, ${item.status}, ${item.checksum ?? null}, ${this.db.json(JSON.parse(JSON.stringify(item.errors)))}, ${this.db.json(JSON.parse(JSON.stringify(item.warnings)))}, ${this.db.json(JSON.parse(JSON.stringify(item.resolvedFields)))}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, checksum = EXCLUDED.checksum, errors = EXCLUDED.errors, warnings = EXCLUDED.warnings, resolved_fields = EXCLUDED.resolved_fields`; }
+  async createMediaUpload(upload: MediaUploadRecord) {
+    const rows = await this.db`INSERT INTO media_uploads (id, workspace_id, created_by, storage_key, storage_upload_id, filename, content_type, byte_size, checksum, part_size, part_count, status, expires_at, completed_at)
+      VALUES (${upload.id}, ${upload.workspaceId}, ${upload.createdBy}, ${upload.storageKey}, ${upload.storageUploadId}, ${upload.filename}, ${upload.contentType}, ${upload.byteSize}, ${upload.checksum ?? null}, ${upload.partSize}, ${upload.partCount}, ${upload.status}, ${upload.expiresAt}, ${upload.completedAt ?? null})
+      ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, completed_at = EXCLUDED.completed_at, updated_at = now()
+      RETURNING id, workspace_id AS "workspaceId", created_by AS "createdBy", storage_key AS "storageKey", storage_upload_id AS "storageUploadId", filename, content_type AS "contentType", byte_size AS "byteSize", checksum, part_size AS "partSize", part_count AS "partCount", status, expires_at AS "expiresAt", completed_at AS "completedAt", created_at AS "createdAt", updated_at AS "updatedAt"`;
+    return normalizeMediaUpload(rows[0]);
+  }
+  async findMediaUpload(id: string, workspaceId: string) {
+    const rows = await this.db`SELECT id, workspace_id AS "workspaceId", created_by AS "createdBy", storage_key AS "storageKey", storage_upload_id AS "storageUploadId", filename, content_type AS "contentType", byte_size AS "byteSize", checksum, part_size AS "partSize", part_count AS "partCount", status, expires_at AS "expiresAt", completed_at AS "completedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM media_uploads WHERE id = ${id} AND workspace_id = ${workspaceId} LIMIT 1`;
+    return rows[0] ? normalizeMediaUpload(rows[0]) : undefined;
+  }
+  async updateMediaUpload(id: string, workspaceId: string, patch: Partial<Pick<MediaUploadRecord, 'status' | 'completedAt'>>) {
+    const rows = await this.db`UPDATE media_uploads SET status = CASE WHEN ${patch.status !== undefined} THEN ${patch.status ?? null} ELSE status END, completed_at = CASE WHEN ${patch.completedAt !== undefined} THEN ${patch.completedAt ?? null} ELSE completed_at END, updated_at = now() WHERE id = ${id} AND workspace_id = ${workspaceId} RETURNING id, workspace_id AS "workspaceId", created_by AS "createdBy", storage_key AS "storageKey", storage_upload_id AS "storageUploadId", filename, content_type AS "contentType", byte_size AS "byteSize", checksum, part_size AS "partSize", part_count AS "partCount", status, expires_at AS "expiresAt", completed_at AS "completedAt", created_at AS "createdAt", updated_at AS "updatedAt"`;
+    return rows[0] ? normalizeMediaUpload(rows[0]) : undefined;
+  }
+  async listExpiredMediaUploads(now = new Date()) {
+    const rows = await this.db`SELECT id, workspace_id AS "workspaceId", created_by AS "createdBy", storage_key AS "storageKey", storage_upload_id AS "storageUploadId", filename, content_type AS "contentType", byte_size AS "byteSize", checksum, part_size AS "partSize", part_count AS "partCount", status, expires_at AS "expiresAt", completed_at AS "completedAt", created_at AS "createdAt", updated_at AS "updatedAt" FROM media_uploads WHERE status = 'initiated' AND expires_at <= ${now} ORDER BY expires_at LIMIT 100`;
+    return rows.map(normalizeMediaUpload);
+  }
 }
 
 export function createRepository(databaseUrl = process.env.DATABASE_URL): { repository: AppRepository; close: () => Promise<void> } {
@@ -438,6 +491,17 @@ function stringValue(value: unknown): string | undefined {
 function publicUrl(key: string): string {
   const base = (process.env.S3_PUBLIC_BASE_URL ?? 'https://cdn.invalid').replace(/\/$/, '');
   return `${base}/${key.split('/').map(encodeURIComponent).join('/')}`;
+}
+
+function normalizeMediaUpload(row: Record<string, unknown> | undefined): MediaUploadRecord {
+  if (!row) throw new Error('Media upload record was not returned');
+  return {
+    id: String(row.id), workspaceId: String(row.workspaceId), createdBy: String(row.createdBy), storageKey: String(row.storageKey), storageUploadId: String(row.storageUploadId),
+    filename: String(row.filename), contentType: String(row.contentType), byteSize: Number(row.byteSize), checksum: row.checksum == null ? null : String(row.checksum),
+    partSize: Number(row.partSize), partCount: Number(row.partCount), status: String(row.status) as MediaUploadStatus,
+    expiresAt: new Date(String(row.expiresAt)), completedAt: row.completedAt == null ? null : new Date(String(row.completedAt)),
+    createdAt: row.createdAt == null ? undefined : new Date(String(row.createdAt)), updatedAt: row.updatedAt == null ? undefined : new Date(String(row.updatedAt)),
+  };
 }
 
 function toIsoString(value: unknown): string | undefined {

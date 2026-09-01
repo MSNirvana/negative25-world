@@ -1,12 +1,12 @@
 <script setup lang="ts">
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
-import { Check, FileImage, Globe2, LoaderCircle, Send, X } from 'lucide-vue-next';
+import { Check, FileImage, Globe2, LoaderCircle, Pause, Play, Send, X } from 'lucide-vue-next';
 import exifr from 'exifr';
 import { unzipSync } from 'fflate';
 import type { ImportBatchSummary, ImportPreview } from '@negative25/contracts';
 import { RouterLink } from 'vue-router';
 import ImportDropzone from '../../components/admin/ImportDropzone.vue';
-import { confirmImportBatch, createImportBatch, fetchImportBatch, isApiConfigured, listImportBatches, previewImportBatch, publishImportBatch, retryImportBatch, uploadPhoto } from '../../api/client';
+import { confirmImportBatch, createImportBatch, fetchImportBatch, isApiConfigured, listImportBatches, previewImportBatch, publishImportBatch, retryImportBatch, uploadPhoto, type UploadProgress } from '../../api/client';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
 import { useLocale } from '../../i18n';
@@ -44,6 +44,9 @@ const publishingHistoryId = ref<string | null>(null);
 const expandingSelection = ref(false);
 const busy = ref(false);
 const error = ref<string | null>(null);
+const uploadProgress = ref<Record<string, UploadProgress>>({});
+const uploadPaused = ref(false);
+let uploadAbortController: AbortController | undefined;
 const session = useSessionStore();
 const workspace = useWorkspaceStore();
 const { t } = useLocale();
@@ -87,6 +90,9 @@ function remove(index: number): void {
   }
 }
 function metadataFor(file: File): FileMetadata | undefined { return metadata.value.find((item) => item.file === file); }
+function uploadProgressFor(file: File): UploadProgress | undefined { return uploadProgress.value[fileFingerprint(file)]; }
+function uploadPercent(file: File): number { const progress = uploadProgressFor(file); return progress ? Math.min(100, Math.round((progress.uploadedBytes / Math.max(1, progress.totalBytes)) * 100)) : 0; }
+function updateUploadProgress(file: File, progress: UploadProgress): void { uploadProgress.value = { ...uploadProgress.value, [fileFingerprint(file)]: progress }; }
 function fileFingerprint(file: File): string { return `${file.name}:${file.size}:${file.lastModified}:${file.type}`; }
 function extensionOf(name: string): string { return name.toLowerCase().split('.').pop() ?? ''; }
 function isImagePath(name: string): boolean { return new Set(['jpg', 'jpeg', 'png', 'webp', 'heic', 'heif']).has(extensionOf(name)); }
@@ -309,19 +315,36 @@ async function submit(): Promise<void> {
   if (!isApiConfigured()) { error.value = t('admin.apiNotConfigured'); return; }
   if (!session.accessToken) { error.value = t('admin.signInBeforeImport'); return; }
   busy.value = true;
+  uploadPaused.value = false;
+  uploadAbortController = new AbortController();
   error.value = null;
   const targetWorkspace = workspace.slug;
   batchWorkspaceSlug.value = targetWorkspace;
   try {
-    const sourceKeys = await Promise.all(files.value.map((file) => uploadPhoto(targetWorkspace, file, session.accessToken!)));
+    const sourceKeys = await uploadFilesInQueue(targetWorkspace, session.accessToken!, uploadAbortController.signal);
     const createdBatch = await createImportBatch(targetWorkspace, sourceKeys, session.accessToken) as { id: string };
     const preview = await previewImportBatch(createdBatch.id, session.accessToken, targetWorkspace);
     batch.value = preview;
   } catch (cause) {
-    error.value = cause instanceof Error ? cause.message : t('admin.createImportError');
+    if (!(cause instanceof DOMException && cause.name === 'AbortError')) error.value = cause instanceof Error ? cause.message : t('admin.createImportError');
   } finally {
     busy.value = false;
+    uploadAbortController = undefined;
   }
+}
+function pauseUpload(): void { if (!busy.value || !uploadAbortController) return; uploadPaused.value = true; uploadAbortController.abort(); }
+async function uploadFilesInQueue(spaceSlug: string, token: string, signal: AbortSignal): Promise<string[]> {
+  const sourceKeys = new Array<string>(files.value.length);
+  let cursor = 0;
+  const worker = async (): Promise<void> => {
+    while (cursor < files.value.length) {
+      const index = cursor++;
+      const file = files.value[index];
+      sourceKeys[index] = await uploadPhoto(spaceSlug, file, token, { signal, onProgress: (progress) => updateUploadProgress(file, progress) });
+    }
+  };
+  await Promise.all(Array.from({ length: Math.min(3, files.value.length) }, () => worker()));
+  return sourceKeys;
 }
 async function retry(): Promise<void> {
   if (!batch.value || busy.value || !session.accessToken) return;
@@ -381,11 +404,11 @@ function isImageFile(file: File): boolean { return new Set(['image/jpeg', 'image
     <p v-if="error && !files.length" class="form-error" role="alert">{{ error }}</p>
     <section v-if="files.length" class="preview">
       <div class="preview-heading"><h3>{{ batch ? t('admin.importPreview') : t('admin.readyPreview') }}</h3><span class="muted">{{ t('admin.files', { count: files.length, size: totalSize }) }}</span></div>
-      <div v-for="(file, index) in files" :key="`${file.name}-${file.lastModified}-${index}`" class="file-row"><img v-if="metadataFor(file)?.previewUrl" class="preview-thumb" :src="metadataFor(file)?.previewUrl" :alt="file.name" /><FileImage v-else :size="17" /><div class="file-info"><strong>{{ file.name }}</strong><span>{{ (file.size / 1024).toFixed(0) }} KB</span><div v-if="metadataFor(file)?.state === 'reading'" class="metadata-state"><LoaderCircle :size="12" class="spin" /> {{ t('admin.readingMetadata') }}</div><div v-else-if="metadataFor(file)?.state === 'error'" class="metadata-state metadata-error">{{ t('admin.metadataError') }}</div><div v-else-if="metadataFor(file)?.state === 'empty'" class="metadata-state">{{ t('admin.metadataEmpty') }}</div><div v-else-if="metadataFor(file)?.state === 'ready'" class="metadata-grid"><span v-if="metadataFor(file)?.capturedAt"><b>{{ t('admin.metadataDate') }}</b>{{ metadataFor(file)?.capturedAt }}</span><span v-if="metadataFor(file)?.camera"><b>{{ t('admin.metadataCamera') }}</b>{{ metadataFor(file)?.camera }}</span><span v-if="metadataFor(file)?.lens"><b>{{ t('admin.metadataLens') }}</b>{{ metadataFor(file)?.lens }}</span><span v-if="metadataFor(file)?.focalLength"><b>{{ t('admin.metadataFocalLength') }}</b>{{ metadataFor(file)?.focalLength }}</span><span v-if="metadataFor(file)?.aperture"><b>{{ t('admin.metadataAperture') }}</b>{{ metadataFor(file)?.aperture }}</span><span v-if="metadataFor(file)?.shutterSpeed"><b>{{ t('admin.metadataShutterSpeed') }}</b>{{ metadataFor(file)?.shutterSpeed }}</span><span v-if="metadataFor(file)?.iso"><b>{{ t('admin.metadataIso') }}</b>{{ metadataFor(file)?.iso }}</span><span v-if="metadataFor(file)?.gps"><b>{{ t('admin.metadataGps') }}</b>{{ metadataFor(file)?.gps }}</span><span v-if="metadataFor(file)?.altitude"><b>{{ t('admin.metadataAltitude') }}</b>{{ metadataFor(file)?.altitude }}</span><span v-if="metadataFor(file)?.rating"><b>{{ t('admin.metadataRating') }}</b>{{ metadataFor(file)?.rating }}</span><span v-if="metadataFor(file)?.dimensions"><b>{{ t('admin.metadataDimensions') }}</b>{{ metadataFor(file)?.dimensions }}</span></div></div><button v-if="!batch" :aria-label="t('admin.removeFile')" @click="remove(index)"><X :size="16" /></button><span v-else class="item-status">{{ statusLabel(batch.items[index]?.status ?? '') }}</span></div>
+      <div v-for="(file, index) in files" :key="`${file.name}-${file.lastModified}-${index}`" class="file-row"><img v-if="metadataFor(file)?.previewUrl" class="preview-thumb" :src="metadataFor(file)?.previewUrl" :alt="file.name" /><FileImage v-else :size="17" /><div class="file-info"><strong>{{ file.name }}</strong><span>{{ (file.size / 1024).toFixed(0) }} KB</span><div v-if="metadataFor(file)?.state === 'reading'" class="metadata-state"><LoaderCircle :size="12" class="spin" /> {{ t('admin.readingMetadata') }}</div><div v-else-if="metadataFor(file)?.state === 'error'" class="metadata-state metadata-error">{{ t('admin.metadataError') }}</div><div v-else-if="metadataFor(file)?.state === 'empty'" class="metadata-state">{{ t('admin.metadataEmpty') }}</div><div v-else-if="metadataFor(file)?.state === 'ready'" class="metadata-grid"><span v-if="metadataFor(file)?.capturedAt"><b>{{ t('admin.metadataDate') }}</b>{{ metadataFor(file)?.capturedAt }}</span><span v-if="metadataFor(file)?.camera"><b>{{ t('admin.metadataCamera') }}</b>{{ metadataFor(file)?.camera }}</span><span v-if="metadataFor(file)?.lens"><b>{{ t('admin.metadataLens') }}</b>{{ metadataFor(file)?.lens }}</span><span v-if="metadataFor(file)?.focalLength"><b>{{ t('admin.metadataFocalLength') }}</b>{{ metadataFor(file)?.focalLength }}</span><span v-if="metadataFor(file)?.aperture"><b>{{ t('admin.metadataAperture') }}</b>{{ metadataFor(file)?.aperture }}</span><span v-if="metadataFor(file)?.shutterSpeed"><b>{{ t('admin.metadataShutterSpeed') }}</b>{{ metadataFor(file)?.shutterSpeed }}</span><span v-if="metadataFor(file)?.iso"><b>{{ t('admin.metadataIso') }}</b>{{ metadataFor(file)?.iso }}</span><span v-if="metadataFor(file)?.gps"><b>{{ t('admin.metadataGps') }}</b>{{ metadataFor(file)?.gps }}</span><span v-if="metadataFor(file)?.altitude"><b>{{ t('admin.metadataAltitude') }}</b>{{ metadataFor(file)?.altitude }}</span><span v-if="metadataFor(file)?.rating"><b>{{ t('admin.metadataRating') }}</b>{{ metadataFor(file)?.rating }}</span><span v-if="metadataFor(file)?.dimensions"><b>{{ t('admin.metadataDimensions') }}</b>{{ metadataFor(file)?.dimensions }}</span></div><div v-if="busy && !batch && uploadProgressFor(file)" class="upload-progress"><div><span>{{ t('admin.uploadingPhoto') }}</span><span>{{ uploadPercent(file) }}%</span></div><progress :value="uploadPercent(file)" max="100" /></div></div><button v-if="!batch" :aria-label="t('admin.removeFile')" @click="remove(index)"><X :size="16" /></button><span v-else class="item-status">{{ statusLabel(batch.items[index]?.status ?? '') }}</span></div>
       <div v-if="batch" class="batch-status"><span>{{ statusLabel(batch.status) }}</span><span>{{ t('admin.processed', { completed: batch.counts.completed, total: batch.counts.total }) }}{{ t('admin.failed', { count: batch.counts.failed }) }}</span></div>
       <div v-if="batch?.status === 'completed'" class="completion-note" role="status"><p>{{ t('admin.importCompleteNotice') }}</p><RouterLink to="/admin/photos">{{ t('admin.goToPhotos') }}</RouterLink></div>
       <p v-if="error" class="form-error" role="alert">{{ error }}</p>
-      <button v-if="!batch" class="confirm-action" :disabled="busy" @click="submit"><Check :size="16" /> {{ busy ? t('admin.importing') : t('admin.importPreview') }}</button><button v-else-if="!isQueued && !isFinished" class="confirm-action" :disabled="busy" @click="confirm"><Check :size="16" /> {{ busy ? t('admin.confirming') : t('admin.confirmImport') }}</button><button v-else-if="batch.status === 'failed'" class="confirm-action" :disabled="busy" @click="retry"><Check :size="16" /> {{ busy ? t('admin.retrying') : t('admin.retryFailedItems') }}</button><span v-else-if="isQueued" class="progress-action"><LoaderCircle :size="16" class="spin" /> {{ t('admin.statusProcessing') }}...</span><span v-else class="progress-action">{{ statusLabel(batch.status) }}</span>
+      <div v-if="!batch && busy" class="upload-actions"><button class="confirm-action" type="button" @click="pauseUpload"><Pause :size="16" /> {{ t('admin.pauseUpload') }}</button><span class="progress-action"><LoaderCircle :size="16" class="spin" /> {{ t('admin.importing') }}</span></div><button v-else-if="!batch && uploadPaused" class="confirm-action" type="button" @click="submit"><Play :size="16" /> {{ t('admin.resumeUpload') }}</button><button v-else-if="!batch" class="confirm-action" :disabled="busy" @click="submit"><Check :size="16" /> {{ busy ? t('admin.importing') : t('admin.importPreview') }}</button><button v-else-if="!isQueued && !isFinished" class="confirm-action" :disabled="busy" @click="confirm"><Check :size="16" /> {{ busy ? t('admin.confirming') : t('admin.confirmImport') }}</button><button v-else-if="batch.status === 'failed'" class="confirm-action" :disabled="busy" @click="retry"><Check :size="16" /> {{ busy ? t('admin.retrying') : t('admin.retryFailedItems') }}</button><span v-else-if="isQueued" class="progress-action"><LoaderCircle :size="16" class="spin" /> {{ t('admin.statusProcessing') }}...</span><span v-else class="progress-action">{{ statusLabel(batch.status) }}</span>
     </section>
     <section class="history"><div class="history-heading"><div><span class="eyebrow">{{ t('admin.archiveLog') }}</span><h3>{{ t('admin.importHistory') }}</h3></div><span class="muted">{{ t('admin.historyCount', { count: history.length }) }}</span></div><div v-if="historyLoading" class="history-empty"><LoaderCircle :size="16" class="spin" /> {{ t('admin.loadingHistory') }}</div><p v-else-if="historyError" class="form-error" role="alert">{{ historyError }}</p><div v-else-if="!history.length" class="history-empty">{{ t('admin.noHistory') }}</div><template v-else v-for="item in history" :key="item.id"><button class="history-row" :class="{ selected: selectedHistoryId === item.id }" :aria-expanded="selectedHistoryId === item.id" @click="openHistory(item)"><span><strong>{{ historyLabel(item.status) }}</strong><small>{{ historyTime(item.createdAt) }}</small><small class="history-count">{{ t('admin.photosProcessed', { completed: item.counts.completed, total: item.counts.total }) }}<span v-if="item.counts.failed">{{ t('admin.failedCount', { count: item.counts.failed }) }}</span></small></span></button><div v-if="selectedHistoryId === item.id" class="history-detail"><div v-if="historyDetailLoading" class="history-empty"><LoaderCircle :size="16" class="spin" /> {{ t('admin.loadingDetails') }}</div><p v-else-if="historyDetailError" class="form-error" role="alert">{{ historyDetailError }}</p><template v-else-if="historyDetail"><div class="history-publish-bar"><span v-if="historyAlreadyPublished" class="publish-note" role="status"><Globe2 :size="14" /> {{ t('admin.batchAlreadyPublished') }}</span><button v-else-if="['completed', 'failed'].includes(historyDetail.status) && historyDetail.counts.completed > 0" class="publish-action" :disabled="publishingHistoryId === historyDetail.id" @click.stop="publishHistory"><Send :size="14" /> {{ publishingHistoryId === historyDetail.id ? t('admin.publishing') : t('admin.publishBatch') }}</button><button v-if="historyDetail.status === 'failed'" class="retry-action" :disabled="busy" @click.stop="retryHistory">{{ busy ? t('admin.retrying') : t('admin.retryFailedItems') }}</button></div><div v-for="detail in historyDetail.items" :key="detail.sourceKey" class="detail-row"><div><strong>{{ detail.sourceKey.split('/').pop() }}</strong><small>{{ statusLabel(detail.status) }}</small></div><p v-if="detail.errors.length" class="detail-error">{{ detail.errors.join('; ') }}</p><p v-else-if="detail.warnings.length" class="detail-warning">{{ detail.warnings.join('; ') }}</p><span v-else class="detail-ok">{{ t('admin.ready') }}</span></div></template></div></template></section>
   </section>
@@ -393,6 +416,8 @@ function isImageFile(file: File): boolean { return new Set(['image/jpeg', 'image
 
 <style scoped>
 .admin-view { max-width: 800px; }.view-heading { margin-bottom: 42px; }.view-heading h2 { font-size: 37px; letter-spacing: -.045em; margin: 10px 0 6px; }.view-heading p { color: var(--muted); margin: 0; }.preview { border-top: 1px solid var(--line); margin-top: 34px; padding-top: 24px; }.preview-heading { align-items: baseline; display: flex; justify-content: space-between; }.preview-heading h3 { font-size: 14px; margin: 0; }.preview-heading .muted { font-size: 12px; }.file-row { align-items: flex-start; border-bottom: 1px solid var(--line); display: flex; gap: 12px; padding: 14px 0; }.file-row > svg { color: var(--accent-deep); flex: 0 0 auto; margin-top: 2px; }.file-info { display: flex; flex: 1; flex-direction: column; gap: 4px; min-width: 0; }.file-row strong { font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }.file-row span { color: var(--muted); font-size: 11px; }.metadata-state { align-items: center; color: var(--muted); display: inline-flex; font-size: 11px; gap: 5px; }.metadata-error { color: #a34d4d; }.metadata-grid { display: flex; flex-wrap: wrap; gap: 5px 13px; margin-top: 2px; }.metadata-grid span { color: var(--muted); font-size: 11px; }.metadata-grid b { color: var(--ink); font-weight: 500; margin-right: 4px; }.item-status { color: var(--muted); margin-left: auto; text-transform: capitalize; }.file-row button { align-items: center; background: transparent; color: var(--muted); display: flex; margin-left: auto; padding: 5px; }.file-row button:hover { color: var(--ink); }.batch-status { display: flex; font-size: 12px; justify-content: space-between; margin-top: 16px; text-transform: capitalize; }.progress-action { align-items: center; color: var(--muted); display: inline-flex; font-size: 12px; gap: 7px; margin-top: 19px; }.spin { animation: spin 1s linear infinite; }.confirm-action { align-items: center; background: var(--ink); border-radius: 4px; color: var(--paper); display: inline-flex; font-size: 12px; gap: 7px; margin-top: 19px; padding: 10px 14px; }
+.upload-progress { display: grid; gap: 4px; margin-top: 4px; }.upload-progress > div { color: var(--muted); display: flex; font-size: 10px; justify-content: space-between; }.upload-progress progress { accent-color: var(--accent-deep); height: 4px; width: 100%; }
+.upload-actions { align-items: center; display: flex; gap: 12px; }
 .selection-status { align-items: center; color: var(--muted); display: flex; font-size: 12px; gap: 6px; margin: 12px 0 -15px; }
 .preview-thumb { background: var(--surface-soft); border-radius: 3px; flex: 0 0 auto; height: 56px; object-fit: cover; width: 76px; }
 .form-error { color: #a34d4d; font-size: 12px; margin: 16px 0 0; }

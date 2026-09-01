@@ -1,12 +1,18 @@
 import {
+  AbortMultipartUploadCommand,
+  CompleteMultipartUploadCommand,
+  CreateMultipartUploadCommand,
   DeleteObjectCommand,
   GetObjectCommand,
   HeadObjectCommand,
+  ListPartsCommand,
   ListObjectsV2Command,
   PutObjectCommand,
   S3Client,
+  UploadPartCommand,
 } from '@aws-sdk/client-s3';
 import { getSignedUrl } from '@aws-sdk/s3-request-presigner';
+import { createHash, randomUUID } from 'node:crypto';
 
 export type StoredObject = {
   key: string;
@@ -21,8 +27,33 @@ export type UploadUrlInput = {
   expiresInSeconds?: number;
 };
 
+export type MultipartPart = { partNumber: number; etag: string; size: number };
+
+export type MultipartUploadInput = {
+  key: string;
+  contentType: string;
+};
+
+export type MultipartPartUrlInput = {
+  key: string;
+  uploadId: string;
+  partNumber: number;
+  expiresInSeconds?: number;
+};
+
+export type CompleteMultipartInput = {
+  key: string;
+  uploadId: string;
+  parts: Array<{ partNumber: number; etag: string }>;
+};
+
 export interface StorageAdapter {
   createUploadUrl(input: UploadUrlInput): Promise<string>;
+  createMultipartUpload(input: MultipartUploadInput): Promise<{ uploadId: string }>;
+  createPartUploadUrl(input: MultipartPartUrlInput): Promise<string>;
+  listParts(key: string, uploadId: string): Promise<MultipartPart[]>;
+  completeMultipartUpload(input: CompleteMultipartInput): Promise<void>;
+  abortMultipartUpload(key: string, uploadId: string): Promise<void>;
   headObject(key: string): Promise<StoredObject | null>;
   getSignedDownloadUrl(key: string, expiresInSeconds?: number): Promise<string>;
   getPublicUrl(key: string): string;
@@ -37,11 +68,13 @@ export type S3StorageOptions = {
   region: string;
   accessKeyId: string;
   secretAccessKey: string;
+  publicEndpoint?: string;
   publicBaseUrl?: string;
 };
 
 export class S3StorageAdapter implements StorageAdapter {
   private readonly client: S3Client;
+  private readonly signingClient: S3Client;
   private readonly bucket: string;
   private readonly publicBaseUrl: string;
 
@@ -54,15 +87,63 @@ export class S3StorageAdapter implements StorageAdapter {
       forcePathStyle: true,
       credentials: { accessKeyId: options.accessKeyId, secretAccessKey: options.secretAccessKey },
     });
+    this.signingClient = new S3Client({
+      endpoint: options.publicEndpoint ?? options.endpoint,
+      region: options.region,
+      forcePathStyle: true,
+      credentials: { accessKeyId: options.accessKeyId, secretAccessKey: options.secretAccessKey },
+    });
   }
 
   async createUploadUrl(input: UploadUrlInput): Promise<string> {
-    return getSignedUrl(this.client, new PutObjectCommand({
+    return getSignedUrl(this.signingClient, new PutObjectCommand({
       Bucket: this.bucket,
       Key: input.key,
       ContentType: input.contentType,
       // Explicitly omit ACLs. Bucket policy controls public preview access.
     }), { expiresIn: input.expiresInSeconds ?? 900 });
+  }
+
+  async createMultipartUpload(input: MultipartUploadInput): Promise<{ uploadId: string }> {
+    const result = await this.client.send(new CreateMultipartUploadCommand({ Bucket: this.bucket, Key: input.key, ContentType: input.contentType }));
+    if (!result.UploadId) throw new Error('Object storage did not return a multipart upload ID');
+    return { uploadId: result.UploadId };
+  }
+
+  async createPartUploadUrl(input: MultipartPartUrlInput): Promise<string> {
+    return getSignedUrl(this.signingClient, new UploadPartCommand({
+      Bucket: this.bucket,
+      Key: input.key,
+      UploadId: input.uploadId,
+      PartNumber: input.partNumber,
+    }), { expiresIn: input.expiresInSeconds ?? 900 });
+  }
+
+  async listParts(key: string, uploadId: string): Promise<MultipartPart[]> {
+    const parts: MultipartPart[] = [];
+    let partNumberMarker: string | undefined;
+    do {
+      const result = await this.client.send(new ListPartsCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId, PartNumberMarker: partNumberMarker }));
+      for (const part of result.Parts ?? []) {
+        if (part.PartNumber && part.ETag) parts.push({ partNumber: part.PartNumber, etag: part.ETag, size: Number(part.Size ?? 0) });
+      }
+      if (!result.IsTruncated || !result.NextPartNumberMarker) break;
+      partNumberMarker = result.NextPartNumberMarker;
+    } while (true);
+    return parts;
+  }
+
+  async completeMultipartUpload(input: CompleteMultipartInput): Promise<void> {
+    await this.client.send(new CompleteMultipartUploadCommand({
+      Bucket: this.bucket,
+      Key: input.key,
+      UploadId: input.uploadId,
+      MultipartUpload: { Parts: input.parts.map((part) => ({ PartNumber: part.partNumber, ETag: part.etag })) },
+    }));
+  }
+
+  async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+    await this.client.send(new AbortMultipartUploadCommand({ Bucket: this.bucket, Key: key, UploadId: uploadId }));
   }
 
   async headObject(key: string): Promise<StoredObject | null> {
@@ -77,7 +158,7 @@ export class S3StorageAdapter implements StorageAdapter {
   }
 
   async getSignedDownloadUrl(key: string, expiresInSeconds = 300): Promise<string> {
-    return getSignedUrl(this.client, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: expiresInSeconds });
+    return getSignedUrl(this.signingClient, new GetObjectCommand({ Bucket: this.bucket, Key: key }), { expiresIn: expiresInSeconds });
   }
 
   getPublicUrl(key: string): string { return `${this.publicBaseUrl}/${key.split('/').map(encodeURIComponent).join('/')}`; }
@@ -96,8 +177,51 @@ export class S3StorageAdapter implements StorageAdapter {
 
 export class MemoryStorageAdapter implements StorageAdapter {
   private readonly objects = new Map<string, StoredObject & { body: Uint8Array }>();
+  private readonly multipart = new Map<string, { key: string; contentType: string; parts: Map<number, { etag: string; body: Uint8Array }> }>();
 
   async createUploadUrl(input: UploadUrlInput): Promise<string> { return `memory://upload/${encodeURIComponent(input.key)}`; }
+
+  async createMultipartUpload(input: MultipartUploadInput): Promise<{ uploadId: string }> {
+    const uploadId = randomUUID();
+    this.multipart.set(uploadId, { key: input.key, contentType: input.contentType, parts: new Map() });
+    return { uploadId };
+  }
+
+  async createPartUploadUrl(input: MultipartPartUrlInput): Promise<string> {
+    if (!this.multipart.has(input.uploadId)) throw new Error('Multipart upload not found');
+    return `memory://part/${encodeURIComponent(input.uploadId)}/${input.partNumber}`;
+  }
+
+  async putMultipartPart(uploadId: string, partNumber: number, body: Uint8Array): Promise<string> {
+    const upload = this.multipart.get(uploadId);
+    if (!upload) throw new Error('Multipart upload not found');
+    const etag = `"${createHash('md5').update(body).digest('hex')}"`;
+    upload.parts.set(partNumber, { etag, body: new Uint8Array(body) });
+    return etag;
+  }
+
+  async listParts(key: string, uploadId: string): Promise<MultipartPart[]> {
+    const upload = this.multipart.get(uploadId);
+    if (!upload || upload.key !== key) return [];
+    return [...upload.parts.entries()].sort(([a], [b]) => a - b).map(([partNumber, part]) => ({ partNumber, etag: part.etag, size: part.body.byteLength }));
+  }
+
+  async completeMultipartUpload(input: CompleteMultipartInput): Promise<void> {
+    const upload = this.multipart.get(input.uploadId);
+    if (!upload || upload.key !== input.key) throw new Error('Multipart upload not found');
+    const body = input.parts.map((part) => upload.parts.get(part.partNumber)?.body).filter((part): part is Uint8Array => Boolean(part));
+    if (body.length !== input.parts.length) throw new Error('Multipart part not found');
+    const bytes = new Uint8Array(body.reduce((sum, part) => sum + part.byteLength, 0));
+    let offset = 0;
+    for (const part of body) { bytes.set(part, offset); offset += part.byteLength; }
+    this.objects.set(input.key, { key: input.key, size: bytes.byteLength, contentType: upload.contentType, body: bytes });
+    this.multipart.delete(input.uploadId);
+  }
+
+  async abortMultipartUpload(key: string, uploadId: string): Promise<void> {
+    const upload = this.multipart.get(uploadId);
+    if (upload?.key === key) this.multipart.delete(uploadId);
+  }
 
   async headObject(key: string): Promise<StoredObject | null> {
     const object = this.objects.get(key);

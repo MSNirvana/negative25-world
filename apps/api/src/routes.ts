@@ -35,7 +35,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   await repository.saveMembership({ workspaceId: primaryWorkspace.id, userId: owner.id, role: 'owner' });
   registerAuthRoutes(app, auth);
   registerWorkspaceRoutes(app, workspaces, auth);
-  registerMediaRoutes(app, new MediaService(createStorageAdapter()), auth, workspaces);
+  const media = new MediaService(createStorageAdapter(), repository);
+  const cleanupTimer = setInterval(() => { void media.cleanupExpiredUploads(); }, 15 * 60 * 1000);
+  cleanupTimer.unref?.();
+  app.addHook('onClose', async () => clearInterval(cleanupTimer));
+  registerMediaRoutes(app, media, auth, workspaces);
   registerImportRoutes(app, new ImportService(repository, publisher), auth, workspaces);
   registerAlbumRoutes(app, new AlbumService(repository), auth, workspaces);
   registerLocationRoutes(app, new LocationService(), workspaces, auth);
@@ -44,10 +48,11 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
 }
 
 function createStorageAdapter(): StorageAdapter {
-  const { S3_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_PUBLIC_BASE_URL } = process.env;
+  const { S3_ENDPOINT, S3_PUBLIC_ENDPOINT, S3_BUCKET, S3_REGION, S3_ACCESS_KEY_ID, S3_SECRET_ACCESS_KEY, S3_PUBLIC_BASE_URL } = process.env;
   if (S3_ENDPOINT && S3_BUCKET && S3_REGION && S3_ACCESS_KEY_ID && S3_SECRET_ACCESS_KEY) {
     return new S3StorageAdapter({
       endpoint: S3_ENDPOINT,
+      publicEndpoint: S3_PUBLIC_ENDPOINT,
       bucket: S3_BUCKET,
       region: S3_REGION,
       accessKeyId: S3_ACCESS_KEY_ID,

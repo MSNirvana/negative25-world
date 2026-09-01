@@ -9,6 +9,7 @@ const serverSchema = z.object({
   N25_IMPORT_QUEUE: z.enum(['0', '1']).default('1'),
   REDIS_URL: requiredUrl,
   S3_ENDPOINT: requiredUrl,
+  S3_PUBLIC_ENDPOINT: requiredUrl.optional(),
   S3_BUCKET: z.string().min(1),
   S3_REGION: z.string().min(1),
   S3_ACCESS_KEY_ID: z.string().min(1),

@@ -6,17 +6,17 @@ import postgres from 'postgres';
 import { getTableName } from 'drizzle-orm';
 import {
   albums, albumPhotos, auditLogs, equipment, importBatches, importItems, locations,
-  memberships, photoFiles, photos, users, workspaces,
+  mediaUploads, memberships, photoFiles, photos, users, workspaces,
 } from './schema/index.js';
 
 describe('database schema foundation', () => {
   it('exports every workspace-owned table with stable names', () => {
     expect([
       users, workspaces, memberships, photos, photoFiles, albums, albumPhotos, equipment,
-      locations, importBatches, importItems, auditLogs,
+      locations, importBatches, importItems, mediaUploads, auditLogs,
     ].map(getTableName)).toEqual([
       'users', 'workspaces', 'memberships', 'photos', 'photo_files', 'albums',
-      'album_photos', 'equipment', 'locations', 'import_batches', 'import_items', 'audit_logs',
+    'album_photos', 'equipment', 'locations', 'import_batches', 'import_items', 'media_uploads', 'audit_logs',
     ]);
   });
 

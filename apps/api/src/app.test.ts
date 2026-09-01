@@ -31,4 +31,21 @@ describe('API foundation', () => {
     expect(content.json()).toMatchObject({ key: upload.key, byteSize: 4 });
     await app.close();
   });
+
+  it('creates and resumes multipart upload sessions for local memory storage', async () => {
+    const app = buildApp();
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@n25.world', password: 'negative25' } });
+    const authorization = 'Bearer ' + login.json().accessToken;
+    const initiated = await app.inject({ method: 'POST', url: '/api/v1/media/multipart/initiate', headers: { authorization }, payload: { spaceSlug: 'primary', filename: 'large.jpg', contentType: 'image/jpeg', byteSize: 33 * 1024 * 1024 } });
+    expect(initiated.statusCode).toBe(200);
+    const upload = initiated.json();
+    expect(upload).toMatchObject({ partCount: 3, partSize: 16 * 1024 * 1024 });
+    const partUrl = await app.inject({ method: 'POST', url: `/api/v1/media/multipart/${upload.id}/part-url`, headers: { authorization }, payload: { spaceSlug: 'primary', partNumber: 1 } });
+    expect(partUrl.statusCode).toBe(200);
+    expect(partUrl.json().url).toMatch(/^memory:\/\/part\//);
+    const status = await app.inject({ method: 'GET', url: `/api/v1/media/multipart/${upload.id}/status?spaceSlug=primary`, headers: { authorization } });
+    expect(status.statusCode).toBe(200);
+    expect(status.json().upload.id).toBe(upload.id);
+    await app.close();
+  });
 });
