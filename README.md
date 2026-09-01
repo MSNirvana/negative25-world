@@ -38,3 +38,9 @@ pnpm build
 ```
 
 生产部署说明见 [`infra/README.md`](infra/README.md)。敏感配置只应放在本地 `.env` 或部署平台的密钥管理中，不要提交真实密钥。
+
+生产镜像使用根目录的 `Dockerfile` 和 `docker-compose.production.yml`。部署前准备 `.env.production`，然后执行：
+
+```bash
+docker compose -f docker-compose.production.yml --env-file .env.production up -d --build
+```
