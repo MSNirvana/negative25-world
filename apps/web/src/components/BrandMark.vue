@@ -12,7 +12,7 @@ withDefaults(defineProps<{ compact?: boolean }>(), { compact: false });
 <style scoped>
 .brand-lockup { align-items: center; display: inline-flex; gap: 10px; }
 .brand-symbol { display: block; height: 34px; object-fit: contain; width: 34px; }
-:global(:root:not([data-theme='paper']):not([data-theme='mist'])) .brand-symbol { filter: invert(1); }
+:global(:root[data-theme='night'] .brand-symbol) { filter: invert(1); }
 .brand-type { display: grid; gap: 1px; text-align: left; }
 .brand-type strong { font-size: 15px; font-weight: 650; letter-spacing: .015em; line-height: 1; }
 .brand-type small { color: var(--muted); font-size: 7px; font-weight: 650; letter-spacing: .12em; line-height: 1; }
