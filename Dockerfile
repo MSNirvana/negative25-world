@@ -13,7 +13,9 @@ ENV VITE_API_BASE_URL=${VITE_API_BASE_URL}
 ENV VITE_AMAP_KEY=${VITE_AMAP_KEY}
 ENV VITE_AMAP_SECURITY_CODE=${VITE_AMAP_SECURITY_CODE}
 
-RUN pnpm install --frozen-lockfile && pnpm build
+RUN pnpm install --frozen-lockfile && pnpm build \
+  && mkdir -p apps/api/dist/db/migrations \
+  && cp apps/api/src/db/migrations/*.sql apps/api/dist/db/migrations/
 
 FROM node:22-bookworm-slim AS api
 WORKDIR /app
