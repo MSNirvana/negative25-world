@@ -66,6 +66,79 @@ test('gallery modes sit beside the brand and remain interactive', async ({ page 
   await expect(page).toHaveURL(/mode=recent/);
 });
 
+test('recent and shuffle pagination keeps loaded rows anchored', async ({ page }) => {
+  const requests: Array<{ mode: string; cursor: string | null; seed: string | null }> = [];
+  const photo = (id: string, title: string, aspectRatio = 1.5) => ({
+    id,
+    spaceSlug: 'primary',
+    title,
+    description: '',
+    capturedAt: '2025-10-12T03:04:05.000Z',
+    rating: 5,
+    aspectRatio,
+    thumbnail: { kind: 'thumbnail', url: `https://example.com/${id}.jpg`, width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  });
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    const url = new URL(route.request().url());
+    const mode = url.searchParams.get('mode') ?? 'featured';
+    const cursor = url.searchParams.get('cursor');
+    const seed = url.searchParams.get('seed');
+    requests.push({ mode, cursor, seed });
+    const offset = cursor ? Number(cursor) : 0;
+    const photos = Array.from({ length: 24 }, (_, index) => photo(`${mode}-${offset + index}`, `${mode} ${offset + index}`, index % 3 === 0 ? 0.8 : 1.5));
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos, pagination: { nextCursor: String(offset + 24), hasMore: true } }) });
+  });
+
+  await page.goto('/');
+  for (const mode of ['Recent', 'Shuffle']) {
+    await page.getByRole('button', { name: mode }).click();
+    await expect(page.getByRole('button', { name: new RegExp(`Open ${mode.toLowerCase()} 0`, 'i') })).toBeVisible();
+    const firstColumnTop = await page.locator('.photo-column').first().evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
+    await page.locator('.gallery-sentinel').scrollIntoViewIfNeeded();
+    await expect(page.getByRole('button', { name: new RegExp(`Open ${mode.toLowerCase()} 23`, 'i') })).toBeVisible();
+    await expect.poll(() => requests.filter((request) => request.mode === mode.toLowerCase() && request.cursor === '24')).toHaveLength(1);
+    const anchoredColumnTop = await page.locator('.photo-column').first().evaluate((element) => element.getBoundingClientRect().top + window.scrollY);
+    expect(anchoredColumnTop).toBe(firstColumnTop);
+  }
+  const shuffleRequests = requests.filter((request) => request.mode === 'shuffle');
+  expect(shuffleRequests.length).toBeGreaterThanOrEqual(2);
+  expect(shuffleRequests[0]?.seed).toBeTruthy();
+  expect(shuffleRequests[1]?.seed).toBe(shuffleRequests[0]?.seed);
+});
+
+test('masonry gallery fills desktop columns with varied photo proportions', async ({ page }) => {
+  const photos = Array.from({ length: 13 }, (_, index) => ({
+    id: `masonry-${index}`,
+    spaceSlug: 'primary',
+    title: `Masonry ${index}`,
+    description: '',
+    capturedAt: '2025-10-12T03:04:05.000Z',
+    rating: index % 7,
+    aspectRatio: [1.8, 0.58, 1.2, 0.82, 1.55][index % 5],
+    thumbnail: { kind: 'thumbnail', url: `https://example.com/masonry-${index}.jpg`, width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  }));
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos, pagination: { nextCursor: null, hasMore: false } }) });
+  });
+
+  await page.goto('/');
+  await expect(page.locator('.photo-grid')).toBeVisible();
+  const columns = page.locator('.photo-column');
+  await expect(columns).toHaveCount(3);
+  for (let index = 0; index < 3; index += 1) await expect(columns.nth(index).locator('.photo-cell')).not.toHaveCount(0);
+  const gridBox = await page.locator('.photo-grid').boundingBox();
+  const lastColumnBox = await columns.last().boundingBox();
+  expect(gridBox).not.toBeNull();
+  expect(lastColumnBox).not.toBeNull();
+  expect((lastColumnBox?.x ?? 0) + (lastColumnBox?.width ?? 0)).toBeCloseTo((gridBox?.x ?? 0) + (gridBox?.width ?? 0), 0);
+});
+
 test('albums mode renders public stacks and collapses on blank space', async ({ page }) => {
   const albumId = '11111111-1111-4111-8111-111111111111';
   const photo = (id: string, title: string, aspectRatio = 1.5) => ({
@@ -118,8 +191,10 @@ test('location mode opens a searchable picker and filters the gallery', async ({
     { id: 'beijing-frame', spaceSlug: 'primary', title: 'Beijing frame', description: '', capturedAt: '2026-01-02T03:04:05.000Z', rating: 5, aspectRatio: 1.5, thumbnail: { kind: 'thumbnail', url: 'https://example.com/beijing.jpg', width: 300, height: 200, format: 'jpeg' }, media: [], location: { id: 'beijing-location', name: '北京市朝阳区' }, metadata: {} },
     { id: 'dolomites-frame', spaceSlug: 'primary', title: 'Dolomites frame', description: '', capturedAt: '2025-10-12T03:04:05.000Z', rating: 6, aspectRatio: 1.5, thumbnail: { kind: 'thumbnail', url: 'https://example.com/dolomites.jpg', width: 300, height: 200, format: 'jpeg' }, media: [], location: { id: 'dolomites-location', name: 'Dolomites, Italy' }, metadata: {} },
   ];
+  const galleryRequests: string[] = [];
   await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
     const location = new URL(route.request().url()).searchParams.get('location');
+    galleryRequests.push(location ?? 'all');
     const filtered = location === 'dolomites-italy' ? photos.slice(1) : location === 'beijing' ? photos.slice(0, 1) : photos;
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: filtered, pagination: { nextCursor: null, hasMore: false } }) });
   });
@@ -131,21 +206,39 @@ test('location mode opens a searchable picker and filters the gallery', async ({
   await expect(page.getByRole('option', { name: 'Beijing' })).toBeEnabled();
   await expect(page.getByRole('option', { name: 'Sichuan' })).toBeDisabled();
   const picker = page.getByRole('dialog', { name: 'Choose a location' });
+  const requestsBeforePendingSelection = galleryRequests.length;
   await picker.getByRole('option', { name: /Dolomites, Italy/ }).click();
+  await expect(page).toHaveURL(/\/$/);
+  expect(galleryRequests.length).toBe(requestsBeforePendingSelection);
+  await expect(page.getByRole('button', { name: 'Open Beijing frame' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Open Dolomites frame' })).toBeVisible();
+  await picker.getByRole('button', { name: 'Confirm' }).click();
   await expect(page).toHaveURL(/mode=location&location=dolomites-italy/);
   await expect(page.getByRole('button', { name: 'Open Dolomites frame' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open Beijing frame' })).toHaveCount(0);
-  const singlePhotoCell = page.locator('.photo-row .photo-cell');
+  const singlePhotoCell = page.locator('.photo-column .photo-cell');
   const [singleCellBox, singleGridBox] = await Promise.all([singlePhotoCell.boundingBox(), page.locator('.photo-grid').boundingBox()]);
   expect(singleCellBox).not.toBeNull();
   expect(singleGridBox).not.toBeNull();
-  expect(singleCellBox?.width).toBeLessThan((singleGridBox?.width ?? 0) * 0.7);
+  expect(singleCellBox?.width).toBeGreaterThan((singleGridBox?.width ?? 0) * 0.9);
   await page.getByRole('button', { name: 'Region' }).click();
-  await page.getByRole('dialog', { name: 'Choose a location' }).getByRole('option', { name: 'Beijing' }).click();
+  const beijingPicker = page.getByRole('dialog', { name: 'Choose a location' });
+  await beijingPicker.getByRole('option', { name: 'Beijing' }).click();
+  await expect(page).toHaveURL(/mode=location&location=dolomites-italy/);
+  await expect(page.getByRole('button', { name: 'Open Dolomites frame' })).toBeVisible();
+  await beijingPicker.getByRole('button', { name: 'Confirm' }).click();
   await expect(page).toHaveURL(/mode=location&location=beijing/);
   await expect(page.getByRole('button', { name: 'Open Beijing frame' })).toBeVisible();
   await page.getByRole('button', { name: 'Region' }).click();
+  const reopenedPicker = page.getByRole('dialog', { name: 'Choose a location' });
+  await reopenedPicker.getByRole('option', { name: 'All locations' }).click();
+  await expect(page).toHaveURL(/mode=location&location=beijing/);
+  await expect(page.getByRole('button', { name: 'Open Beijing frame' })).toBeVisible();
+  await reopenedPicker.getByRole('button', { name: 'Cancel' }).click();
+  await expect(page).toHaveURL(/mode=location&location=beijing/);
+  await page.getByRole('button', { name: 'Region' }).click();
   await page.getByRole('dialog', { name: 'Choose a location' }).getByRole('option', { name: 'All locations' }).click();
+  await page.getByRole('dialog', { name: 'Choose a location' }).getByRole('button', { name: 'Confirm' }).click();
   await expect(page).toHaveURL(/mode=location(?:$|&)/);
   await expect(page.getByRole('button', { name: 'Open Beijing frame' })).toBeVisible();
 });

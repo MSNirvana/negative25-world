@@ -3,27 +3,35 @@ import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PhotoCard from './PhotoCard.vue';
 import type { GalleryPhoto } from '../stores/gallery';
 import { useLocale } from '../i18n';
-import { appendJustifiedRows, buildJustifiedRows, justifiedCellStyle, type JustifiedRow } from '../lib/justified-rows';
+import { appendMasonryColumns, buildMasonryColumns, masonryGapForWidth, type MasonryColumn } from '../lib/masonry-columns';
 
 const props = defineProps<{ photos: GalleryPhoto[] }>();
 const emit = defineEmits<{ (event: 'open', photo: GalleryPhoto): void }>();
 const { t } = useLocale();
 const root = ref<HTMLElement | null>(null);
 const width = ref(0);
-const gap = 12;
-const rows = ref<JustifiedRow<GalleryPhoto>[]>([]);
+const columns = ref<MasonryColumn<GalleryPhoto>[]>([]);
 let previousPhotos: GalleryPhoto[] = [];
 let previousWidth = 0;
 
-function updateRows(): void {
-  rows.value = previousWidth === width.value
-    ? appendJustifiedRows(rows.value, previousPhotos, props.photos, width.value, gap)
-    : buildJustifiedRows(props.photos, width.value, gap);
+function updateColumns(): void {
+  const gap = masonryGapForWidth(width.value);
+  columns.value = previousWidth === width.value
+    ? appendMasonryColumns(columns.value, previousPhotos, props.photos, width.value, gap)
+    : buildMasonryColumns(props.photos, width.value, gap);
   previousPhotos = [...props.photos];
   previousWidth = width.value;
 }
 
-function scheduleRows(): void { void nextTick(updateRows); }
+let rowsFrame = 0;
+function scheduleRows(): void {
+  if (rowsFrame) return;
+  if (typeof window !== 'undefined' && typeof window.requestAnimationFrame === 'function') {
+    rowsFrame = window.requestAnimationFrame(() => { rowsFrame = 0; updateColumns(); });
+    return;
+  }
+  void nextTick(updateColumns);
+}
 
 function updateWidth(): void { width.value = root.value?.clientWidth ?? 0; }
 
@@ -38,13 +46,16 @@ onMounted(() => {
 });
 watch(() => props.photos.map((photo) => photo.id), scheduleRows, { flush: 'post' });
 watch(width, scheduleRows, { flush: 'post' });
-onBeforeUnmount(() => resizeObserver?.disconnect());
+onBeforeUnmount(() => {
+  resizeObserver?.disconnect();
+  if (rowsFrame && typeof window !== 'undefined') window.cancelAnimationFrame(rowsFrame);
+});
 </script>
 
 <template>
-  <section ref="root" class="photo-grid" :aria-label="t('photo.gallery')">
-      <div v-for="(row, rowIndex) in rows" :key="row.photos[0]?.id ?? rowIndex" class="photo-row" :class="{ 'is-last': row.isLast }" :style="{ '--row-height': `${row.height}px` }">
-        <div v-for="photo in row.photos" :key="photo.id" class="photo-cell" :style="justifiedCellStyle(row, photo)">
+  <section ref="root" class="photo-grid" :style="{ '--column-count': columns.length, '--grid-gap': `${masonryGapForWidth(width)}px` }" :aria-label="t('photo.gallery')">
+    <div v-for="column in columns" :key="column.index" class="photo-column">
+      <div v-for="photo in column.photos" :key="photo.id" class="photo-cell">
         <PhotoCard :photo="photo" @open="emit('open', $event)" />
       </div>
     </div>
@@ -52,11 +63,7 @@ onBeforeUnmount(() => resizeObserver?.disconnect());
 </template>
 
 <style scoped>
-.photo-grid { display: grid; gap: 12px; width: 100%; }
-.photo-row { display: flex; gap: 12px; min-width: 0; width: 100%; }
-.photo-row.is-last { min-height: var(--row-height); }
-.photo-cell { min-width: 0; }
-.photo-row.is-last .photo-cell { flex-basis: auto !important; width: auto; }
-.photo-row.is-last :deep(.image-wrap) { height: var(--row-height); }
-@media (max-width: 620px) { .photo-grid, .photo-row { gap: 6px; }.photo-row.is-last { min-height: var(--row-height); }.photo-row.is-last :deep(.image-wrap) { height: var(--row-height); } }
+.photo-grid { align-items: start; display: grid; gap: var(--grid-gap); grid-template-columns: repeat(var(--column-count), minmax(0, 1fr)); width: 100%; }
+.photo-column { display: grid; gap: var(--grid-gap); min-width: 0; }
+.photo-cell { min-width: 0; width: 100%; }
 </style>
