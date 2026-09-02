@@ -162,14 +162,40 @@ export const useGalleryStore = defineStore('gallery', () => {
     activeRequest = controller;
     loading.value = true;
     error.value = null;
+    const retryEmptyFeatured = nextMode === 'featured' && !append;
+    let attempt = 0;
+    const isCurrentRequest = (): boolean => !controller.signal.aborted
+      && requestId === requestSequence
+      && mode.value === nextMode
+      && spaceSlug.value === requestSpaceSlug
+      && authToken.value === requestToken
+      && (nextMode !== 'shuffle' || shuffleSeed.value === requestSeed);
     try {
-      const response = await fetchGallery(nextMode, requestCursor, controller.signal, nextMode === 'location' ? selectedLocation.value ?? undefined : undefined, requestSpaceSlug, requestToken, undefined, requestSeed);
-      if (controller.signal.aborted || requestId !== requestSequence || mode.value !== nextMode || spaceSlug.value !== requestSpaceSlug || authToken.value !== requestToken || (nextMode === 'shuffle' && shuffleSeed.value !== requestSeed)) return;
-      const incoming = response.photos.map(toGalleryPhoto);
-      const mergedPhotos = append ? [...photos.value, ...incoming.filter((photo) => !photos.value.some((existing) => existing.id === photo.id))] : incoming;
-      photos.value = mergedPhotos;
-      nextCursor.value = response.pagination.nextCursor;
-      nextCursorMode.value = nextMode;
+      while (true) {
+        attempt += 1;
+        try {
+          const response = await fetchGallery(nextMode, requestCursor, controller.signal, nextMode === 'location' ? selectedLocation.value ?? undefined : undefined, requestSpaceSlug, requestToken, undefined, requestSeed);
+          if (!isCurrentRequest()) return;
+          const incoming = response.photos.map(toGalleryPhoto);
+          if (retryEmptyFeatured && !incoming.length && attempt < 2) {
+            if (!await waitForGalleryRetry(controller.signal) || !isCurrentRequest()) return;
+            continue;
+          }
+          const mergedPhotos = append ? [...photos.value, ...incoming.filter((photo) => !photos.value.some((existing) => existing.id === photo.id))] : incoming;
+          photos.value = mergedPhotos;
+          nextCursor.value = response.pagination.nextCursor;
+          nextCursorMode.value = nextMode;
+          break;
+        } catch (cause) {
+          if (controller.signal.aborted) return;
+          if (attempt < 2) {
+            if (!await waitForGalleryRetry(controller.signal) || !isCurrentRequest()) return;
+            continue;
+          }
+          error.value = cause instanceof Error ? cause.message : t('gallery.loadError');
+          break;
+        }
+      }
     } catch (cause) {
       if (controller.signal.aborted) return;
       error.value = cause instanceof Error ? cause.message : t('gallery.loadError');
@@ -197,6 +223,15 @@ export const useGalleryStore = defineStore('gallery', () => {
   }
   return { mode, selectedLocation, photos, locationPhotos, locationCatalogLoading, locationCatalogReady, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, shuffleSeed, setMode, setLocation, setContext, loadLocationCatalog, openPhoto, closePhoto, previousPhoto, nextPhoto, load, loadPhoto };
 });
+
+function waitForGalleryRetry(signal: AbortSignal, delayMs = 160): Promise<boolean> {
+  if (signal.aborted) return Promise.resolve(false);
+  return new Promise((resolve) => {
+    const timer = setTimeout(() => { signal.removeEventListener('abort', onAbort); resolve(true); }, delayMs);
+    const onAbort = (): void => { clearTimeout(timer); signal.removeEventListener('abort', onAbort); resolve(false); };
+    signal.addEventListener('abort', onAbort, { once: true });
+  });
+}
 
 export function toGalleryPhoto(photo: PhotoSummary): GalleryPhoto {
   const metadata = photo.metadata as Record<string, unknown>;
