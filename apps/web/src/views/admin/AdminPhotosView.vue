@@ -6,6 +6,7 @@ import { copyAdminPhotoFields, deleteAdminPhoto, deleteAdminPhotos, isApiConfigu
 import AdminLocationPicker from '../../components/admin/AdminLocationPicker.vue';
 import { groupAdminPhotos, type AdminPhotoGroup } from '../../lib/admin-photo-groups';
 import { areAllBatchPhotosSelected, toggleBatchPhotoSelection } from '../../lib/admin-photo-batch-selection';
+import { reconcileExpandedBatchKeys } from '../../lib/admin-photo-batch-expansion';
 import { formatPhotoDisplayLocation } from '../../lib/photo-display-location';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
@@ -35,6 +36,7 @@ async function loadPhotos(): Promise<void> {
   error.value = null;
   try {
     const result = await listAdminPhotos(workspace.slug, session.accessToken);
+    expandedBatchKeys.value = new Set();
     photos.value = result;
     selectedIds.value = selectedIds.value.filter((id) => result.some((photo) => photo.id === id));
   } catch (cause) {
@@ -250,10 +252,7 @@ function replacePhotoById(next: AdminPhoto): void {
   if (index >= 0) photos.value[index] = next;
 }
 watch(groupedFilteredPhotos, (groups) => {
-  const visibleKeys = new Set(groups.map((group) => group.key));
-  const next = new Set([...expandedBatchKeys.value].filter((key) => visibleKeys.has(key)));
-  if (!next.size && groups.length) next.add(groups[0].key);
-  expandedBatchKeys.value = next;
+  expandedBatchKeys.value = reconcileExpandedBatchKeys(expandedBatchKeys.value, groups);
 }, { immediate: true });
 </script>
 
