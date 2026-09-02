@@ -22,9 +22,11 @@ export type WorkspaceSummaryRecord = {
 };
 export type ImportBatchSummaryRecord = { id: string; workspaceId: string; status: string; counts: { total: number; completed: number; failed: number }; createdAt: string; publishedCount?: number };
 export type PhotoLocationRecord = { id: string; name: string };
-export type PhotoRecord = { id: string; workspaceId: string; title: string; description: string; published: boolean; hidden: boolean; ownerOnly?: boolean; rating: number | null; checksum?: string; spaceSlug?: string; capturedAt?: string; aspectRatio?: number; thumbnail?: unknown; media?: unknown[]; location?: PhotoLocationRecord | null; latitude?: number; longitude?: number; metadata?: Record<string, unknown> };
+export type PhotoImportBatch = { id: string; createdAt: string; itemCreatedAt?: string; sourceKey?: string };
+export type PhotoRecord = { id: string; workspaceId: string; title: string; description: string; published: boolean; hidden: boolean; ownerOnly?: boolean; rating: number | null; checksum?: string; spaceSlug?: string; capturedAt?: string; aspectRatio?: number; thumbnail?: unknown; media?: unknown[]; location?: PhotoLocationRecord | null; latitude?: number; longitude?: number; metadata?: Record<string, unknown>; importBatch?: PhotoImportBatch };
+export type PhotoQueryOptions = { includeImportBatch?: boolean };
 export type AlbumRecord = { id: string; workspaceId: string; spaceSlug?: string; title: string; description?: string; shootDate?: string | null; coverPhotoId: string | null; sortOrder: number; photoIds: string[] };
-export type BatchItem = { id: string; sourceKey: string; status: string; checksum?: string; errors: string[]; warnings: string[]; resolvedFields: Record<string, unknown> };
+export type BatchItem = { id: string; sourceKey: string; status: string; checksum?: string; errors: string[]; warnings: string[]; resolvedFields: Record<string, unknown>; createdAt?: string };
 export type BatchRecord = { id: string; workspaceId: string; actorId: string; status: string; idempotencyKey?: string; items: BatchItem[]; counts: { total: number; completed: number; failed: number }; publishedCount?: number; createdAt?: string };
 export type MediaUploadStatus = 'initiated' | 'completed' | 'aborted' | 'expired';
 export type MediaUploadRecord = {
@@ -81,12 +83,12 @@ export interface AppRepository {
   listWorkspaceMembers(workspaceId: string): Promise<WorkspaceMemberRecord[]>;
   saveMembership(membership: MembershipRecord): Promise<void>;
   updateMembershipRole(workspaceId: string, userId: string, role: MembershipRecord['role']): Promise<boolean>;
-  listPhotos(workspaceId: string): Promise<PhotoRecord[]>;
-  findPhoto(workspaceId: string, id: string): Promise<PhotoRecord | undefined>;
+  listPhotos(workspaceId: string, options?: PhotoQueryOptions): Promise<PhotoRecord[]>;
+  findPhoto(workspaceId: string, id: string, options?: PhotoQueryOptions): Promise<PhotoRecord | undefined>;
   listPhotoStorageKeys(workspaceId: string, id: string): Promise<string[]>;
   deletePhoto(id: string, workspaceId: string): Promise<{ storageKeys: string[] } | undefined>;
   savePhoto(photo: PhotoRecord): Promise<void>;
-  updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>): Promise<PhotoRecord | undefined>;
+  updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>, options?: PhotoQueryOptions): Promise<PhotoRecord | undefined>;
   listAlbums(workspaceId: string, publishedOnly?: boolean): Promise<AlbumRecord[]>;
   findAlbum(workspaceId: string, albumId: string, publishedOnly?: boolean): Promise<AlbumRecord | undefined>;
   saveAlbum(album: AlbumRecord): Promise<AlbumRecord>;
@@ -168,8 +170,19 @@ export class MemoryRepository implements AppRepository {
   }
   async saveMembership(value: MembershipRecord) { this.memberships.set(`${value.workspaceId}:${value.userId}`, value); }
   async updateMembershipRole(workspaceId: string, userId: string, role: MembershipRecord['role']) { const membership = this.memberships.get(`${workspaceId}:${userId}`); if (!membership) return false; membership.role = role; return true; }
-  async listPhotos(workspaceId: string) { return [...this.photos.values()].filter((photo) => photo.workspaceId === workspaceId).map((photo) => ({ ...photo })); }
-  async findPhoto(workspaceId: string, id: string) { const photo = this.photos.get(id); return photo?.workspaceId === workspaceId ? { ...photo } : undefined; }
+  async listPhotos(workspaceId: string, options?: PhotoQueryOptions) {
+    const workspacePhotos = [...this.photos.values()].filter((photo) => photo.workspaceId === workspaceId);
+    if (!options?.includeImportBatch) return workspacePhotos.map(clonePhotoWithoutImportBatch);
+    const batches = [...this.batches.values()].filter((batch) => batch.workspaceId === workspaceId);
+    return workspacePhotos.map((photo) => enrichPhotoWithImportBatch(photo, batches)).sort(comparePhotosByImportBatch);
+  }
+  async findPhoto(workspaceId: string, id: string, options?: PhotoQueryOptions) {
+    const photo = this.photos.get(id);
+    if (!photo || photo.workspaceId !== workspaceId) return undefined;
+    if (!options?.includeImportBatch) return clonePhotoWithoutImportBatch(photo);
+    const batches = [...this.batches.values()].filter((batch) => batch.workspaceId === workspaceId);
+    return enrichPhotoWithImportBatch(photo, batches);
+  }
   async listPhotoStorageKeys(workspaceId: string, id: string) {
     const photo = await this.findPhoto(workspaceId, id);
     if (!photo) return [];
@@ -188,8 +201,8 @@ export class MemoryRepository implements AppRepository {
     }
     return { storageKeys };
   }
-  async savePhoto(photo: PhotoRecord) { this.photos.set(photo.id, { ...photo }); }
-  async updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>) { const photo = await this.findPhoto(workspaceId, id); if (!photo) return undefined; const updated = { ...photo, ...patch }; await this.savePhoto(updated); return updated; }
+  async savePhoto(photo: PhotoRecord) { this.photos.set(photo.id, clonePhotoWithoutImportBatch(photo)); }
+  async updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>, options?: PhotoQueryOptions) { const photo = await this.findPhoto(workspaceId, id, options); if (!photo) return undefined; const updated = { ...photo, ...patch }; await this.savePhoto(updated); return updated; }
   async listAlbums(workspaceId: string, publishedOnly = false) {
     return [...this.albums.values()]
       .filter((album) => album.workspaceId === workspaceId)
@@ -326,8 +339,41 @@ export class PostgresRepository implements AppRepository {
   async listWorkspaceMembers(workspaceId: string) { return await this.db`SELECT m.user_id AS "userId", u.email, u.name, m.role FROM memberships m JOIN users u ON u.id = m.user_id WHERE m.workspace_id = ${workspaceId} ORDER BY m.created_at, u.email` as unknown as WorkspaceMemberRecord[]; }
   async saveMembership(value: MembershipRecord) { await this.db`INSERT INTO memberships (workspace_id, user_id, role) VALUES (${value.workspaceId}, ${value.userId}, ${value.role}) ON CONFLICT (workspace_id, user_id) DO UPDATE SET role = EXCLUDED.role`; }
   async updateMembershipRole(workspaceId: string, userId: string, role: MembershipRecord['role']) { const result = await this.db`UPDATE memberships SET role = ${role} WHERE workspace_id = ${workspaceId} AND user_id = ${userId}`; return result.count > 0; }
-  async listPhotos(workspaceId: string) {
-    const rows = await this.db`SELECT p.id, p.workspace_id AS "workspaceId", p.checksum, p.metadata, w.slug AS "spaceSlug", p.title, p.description, p.published, p.hidden, p.rating, p.captured_at AS "capturedAt", p.created_at AS "createdAt", p.latitude, p.longitude, p.location_id AS "locationId", l.display_name AS "locationName" FROM photos p JOIN workspaces w ON w.id = p.workspace_id LEFT JOIN locations l ON l.id = p.location_id WHERE p.workspace_id = ${workspaceId} ORDER BY p.sort_order, p.id`;
+  async listPhotos(workspaceId: string, options?: PhotoQueryOptions) {
+    const rows = options?.includeImportBatch ? await this.db`
+      SELECT p.id, p.workspace_id AS "workspaceId", p.checksum, p.metadata, w.slug AS "spaceSlug", p.title, p.description,
+        p.published, p.hidden, p.rating, p.captured_at AS "capturedAt", p.created_at AS "createdAt", p.latitude, p.longitude,
+        p.location_id AS "locationId", l.display_name AS "locationName",
+        imported.batch_id AS "importBatchId", imported.batch_created_at AS "importBatchCreatedAt",
+        imported.item_created_at AS "importItemCreatedAt", imported.source_key AS "importSourceKey", imported.item_id AS "importItemId"
+      FROM photos p
+      JOIN workspaces w ON w.id = p.workspace_id
+      LEFT JOIN locations l ON l.id = p.location_id
+      LEFT JOIN LATERAL (
+        SELECT item.id AS item_id, item.batch_id, batch.created_at AS batch_created_at,
+          item.created_at AS item_created_at, item.source_key
+        FROM import_items item
+        JOIN import_batches batch ON batch.id = item.batch_id
+        WHERE batch.workspace_id = p.workspace_id
+          AND item.status = 'completed'
+          AND item.checksum IS NOT NULL
+          AND item.checksum = p.checksum
+        ORDER BY batch.created_at DESC, item.created_at ASC, item.source_key ASC, item.id ASC
+        LIMIT 1
+      ) imported ON TRUE
+      WHERE p.workspace_id = ${workspaceId}
+      ORDER BY imported.batch_created_at DESC NULLS LAST, imported.item_created_at ASC NULLS LAST,
+        imported.source_key ASC NULLS LAST, imported.item_id ASC NULLS LAST, p.sort_order, p.id
+    ` : await this.db`
+      SELECT p.id, p.workspace_id AS "workspaceId", p.checksum, p.metadata, w.slug AS "spaceSlug", p.title, p.description,
+        p.published, p.hidden, p.rating, p.captured_at AS "capturedAt", p.created_at AS "createdAt", p.latitude, p.longitude,
+        p.location_id AS "locationId", l.display_name AS "locationName"
+      FROM photos p
+      JOIN workspaces w ON w.id = p.workspace_id
+      LEFT JOIN locations l ON l.id = p.location_id
+      WHERE p.workspace_id = ${workspaceId}
+      ORDER BY p.sort_order, p.id
+    `;
     if (!rows.length) return [];
     const files = await this.db`SELECT photo_id AS "photoId", kind, storage_key AS "storageKey", width, height, format FROM photo_files WHERE photo_id = ANY(${this.db.array(rows.map((row) => String(row.id)))})`;
     const filesByPhoto = new Map<string, Array<Record<string, unknown>>>();
@@ -338,8 +384,40 @@ export class PostgresRepository implements AppRepository {
     }
     return rows.map((row) => toPhotoRecord(row as Record<string, unknown>, filesByPhoto.get(String(row.id)) ?? []));
   }
-  async findPhoto(workspaceId: string, id: string) {
-    const rows = await this.db`SELECT p.id, p.workspace_id AS "workspaceId", p.checksum, p.metadata, w.slug AS "spaceSlug", p.title, p.description, p.published, p.hidden, p.rating, p.captured_at AS "capturedAt", p.created_at AS "createdAt", p.latitude, p.longitude, p.location_id AS "locationId", l.display_name AS "locationName" FROM photos p JOIN workspaces w ON w.id = p.workspace_id LEFT JOIN locations l ON l.id = p.location_id WHERE p.workspace_id = ${workspaceId} AND p.id = ${id} LIMIT 1`;
+  async findPhoto(workspaceId: string, id: string, options?: PhotoQueryOptions) {
+    const rows = options?.includeImportBatch ? await this.db`
+      SELECT p.id, p.workspace_id AS "workspaceId", p.checksum, p.metadata, w.slug AS "spaceSlug", p.title, p.description,
+        p.published, p.hidden, p.rating, p.captured_at AS "capturedAt", p.created_at AS "createdAt", p.latitude, p.longitude,
+        p.location_id AS "locationId", l.display_name AS "locationName",
+        imported.batch_id AS "importBatchId", imported.batch_created_at AS "importBatchCreatedAt",
+        imported.item_created_at AS "importItemCreatedAt", imported.source_key AS "importSourceKey", imported.item_id AS "importItemId"
+      FROM photos p
+      JOIN workspaces w ON w.id = p.workspace_id
+      LEFT JOIN locations l ON l.id = p.location_id
+      LEFT JOIN LATERAL (
+        SELECT item.id AS item_id, item.batch_id, batch.created_at AS batch_created_at,
+          item.created_at AS item_created_at, item.source_key
+        FROM import_items item
+        JOIN import_batches batch ON batch.id = item.batch_id
+        WHERE batch.workspace_id = p.workspace_id
+          AND item.status = 'completed'
+          AND item.checksum IS NOT NULL
+          AND item.checksum = p.checksum
+        ORDER BY batch.created_at DESC, item.created_at ASC, item.source_key ASC, item.id ASC
+        LIMIT 1
+      ) imported ON TRUE
+      WHERE p.workspace_id = ${workspaceId} AND p.id = ${id}
+      LIMIT 1
+    ` : await this.db`
+      SELECT p.id, p.workspace_id AS "workspaceId", p.checksum, p.metadata, w.slug AS "spaceSlug", p.title, p.description,
+        p.published, p.hidden, p.rating, p.captured_at AS "capturedAt", p.created_at AS "createdAt", p.latitude, p.longitude,
+        p.location_id AS "locationId", l.display_name AS "locationName"
+      FROM photos p
+      JOIN workspaces w ON w.id = p.workspace_id
+      LEFT JOIN locations l ON l.id = p.location_id
+      WHERE p.workspace_id = ${workspaceId} AND p.id = ${id}
+      LIMIT 1
+    `;
     if (!rows[0]) return undefined;
     const files = await this.db`SELECT photo_id AS "photoId", kind, storage_key AS "storageKey", width, height, format FROM photo_files WHERE photo_id = ${id}`;
     return toPhotoRecord(rows[0] as Record<string, unknown>, files as unknown as Array<Record<string, unknown>>);
@@ -367,7 +445,7 @@ export class PostgresRepository implements AppRepository {
       ON CONFLICT (id) DO UPDATE SET title = EXCLUDED.title, description = EXCLUDED.description, metadata = EXCLUDED.metadata,
         latitude = EXCLUDED.latitude, longitude = EXCLUDED.longitude, published = EXCLUDED.published, hidden = EXCLUDED.hidden, rating = EXCLUDED.rating`;
   }
-  async updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>) { const photo = await this.findPhoto(workspaceId, id); if (!photo) return undefined; const updated = { ...photo, ...patch }; await this.savePhoto(updated); return updated; }
+  async updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>, options?: PhotoQueryOptions) { const photo = await this.findPhoto(workspaceId, id, options); if (!photo) return undefined; const updated = { ...photo, ...patch }; await this.savePhoto(updated); return options?.includeImportBatch ? this.findPhoto(workspaceId, id, options) : updated; }
   async listAlbums(workspaceId: string, publishedOnly = false) {
     const rows = await this.db`SELECT a.id, a.workspace_id AS "workspaceId", w.slug AS "spaceSlug", a.title, a.description, a.shoot_date AS "shootDate", a.cover_photo_id AS "coverPhotoId", a.sort_order AS "sortOrder"
       FROM albums a JOIN workspaces w ON w.id = a.workspace_id
@@ -434,7 +512,8 @@ export class PostgresRepository implements AppRepository {
         WHERE p.workspace_id = batch.workspace_id AND p.published = true) AS "publishedCount"
       FROM import_batches batch WHERE batch.id = ${id} AND batch.workspace_id = ${workspaceId}`;
     if (!rows[0]) return undefined;
-    const items = await this.db`SELECT id, source_key AS "sourceKey", status, checksum, errors, warnings, resolved_fields AS "resolvedFields" FROM import_items WHERE batch_id = ${id}`;
+    const rawItems = await this.db`SELECT id, source_key AS "sourceKey", status, checksum, errors, warnings, resolved_fields AS "resolvedFields", created_at AS "createdAt" FROM import_items WHERE batch_id = ${id} ORDER BY created_at ASC, source_key ASC, id ASC`;
+    const items: Array<Record<string, unknown>> = (rawItems as unknown as Array<Record<string, unknown>>).map((item) => ({ ...item, createdAt: toIsoString(item.createdAt) ?? undefined }));
     return { ...rows[0], publishedCount: Number(rows[0].publishedCount ?? 0), items, counts: { total: items.length, completed: items.filter((item) => item.status === 'completed').length, failed: items.filter((item) => item.status === 'failed').length } } as unknown as BatchRecord;
   }
   async saveBatch(batch: BatchRecord) { await this.db`INSERT INTO import_batches (id, workspace_id, actor_id, status, idempotency_key, total_count, completed_count, failed_count) VALUES (${batch.id}, ${batch.workspaceId}, ${batch.actorId}, ${batch.status}, ${batch.idempotencyKey ?? null}, ${batch.counts.total}, ${batch.counts.completed}, ${batch.counts.failed}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, total_count = EXCLUDED.total_count, completed_count = EXCLUDED.completed_count, failed_count = EXCLUDED.failed_count`; for (const item of batch.items) await this.db`INSERT INTO import_items (id, batch_id, source_key, status, checksum, errors, warnings, resolved_fields) VALUES (${item.id}, ${batch.id}, ${item.sourceKey}, ${item.status}, ${item.checksum ?? null}, ${this.db.json(JSON.parse(JSON.stringify(item.errors)))}, ${this.db.json(JSON.parse(JSON.stringify(item.warnings)))}, ${this.db.json(JSON.parse(JSON.stringify(item.resolvedFields)))}) ON CONFLICT (id) DO UPDATE SET status = EXCLUDED.status, checksum = EXCLUDED.checksum, errors = EXCLUDED.errors, warnings = EXCLUDED.warnings, resolved_fields = EXCLUDED.resolved_fields`; }
@@ -466,6 +545,64 @@ export function createRepository(databaseUrl = process.env.DATABASE_URL): { repo
   return { repository: new PostgresRepository(db), close: () => db.end() };
 }
 
+function enrichPhotoWithImportBatch(photo: PhotoRecord, batches: BatchRecord[]): PhotoRecord {
+  if (!photo.checksum) return clonePhotoWithoutImportBatch(photo);
+  const matches = batches.flatMap((batch) => batch.items.flatMap((item, index) => {
+    if (item.status !== 'completed' || item.checksum !== photo.checksum) return [];
+    return [{ batch, item, index }];
+  }));
+  matches.sort((a, b) => compareBatchCreatedAt(b.batch, a.batch) || compareItemCreatedAt(a.item.createdAt, b.item.createdAt) || a.index - b.index || a.item.sourceKey.localeCompare(b.item.sourceKey) || a.item.id.localeCompare(b.item.id));
+  const match = matches[0];
+  if (!match) return clonePhotoWithoutImportBatch(photo);
+  return {
+    ...photo,
+    importBatch: {
+      id: match.batch.id,
+      createdAt: match.batch.createdAt ?? new Date(0).toISOString(),
+      itemCreatedAt: match.item.createdAt,
+      sourceKey: match.item.sourceKey,
+    },
+  };
+}
+
+function clonePhotoWithoutImportBatch(photo: PhotoRecord): PhotoRecord {
+  const { importBatch: _importBatch, ...rest } = photo;
+  return { ...rest };
+}
+
+function compareBatchCreatedAt(a: BatchRecord, b: BatchRecord): number {
+  const aTime = Date.parse(a.createdAt ?? '');
+  const bTime = Date.parse(b.createdAt ?? '');
+  if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime;
+  if (Number.isFinite(aTime) !== Number.isFinite(bTime)) return Number.isFinite(aTime) ? 1 : -1;
+  return a.id.localeCompare(b.id);
+}
+
+function comparePhotosByImportBatch(a: PhotoRecord, b: PhotoRecord): number {
+  const aBatch = a.importBatch;
+  const bBatch = b.importBatch;
+  if (aBatch && bBatch) {
+    const batchTime = Date.parse(bBatch.createdAt) - Date.parse(aBatch.createdAt);
+    if (Number.isFinite(batchTime) && batchTime !== 0) return batchTime;
+    if (aBatch.id !== bBatch.id) return bBatch.id.localeCompare(aBatch.id);
+    const itemTime = compareItemCreatedAt(aBatch.itemCreatedAt, bBatch.itemCreatedAt);
+    if (itemTime !== 0) return itemTime;
+    const sourceOrder = (aBatch.sourceKey ?? '').localeCompare(bBatch.sourceKey ?? '');
+    if (sourceOrder !== 0) return sourceOrder;
+  } else if (aBatch || bBatch) {
+    return aBatch ? -1 : 1;
+  }
+  return a.id.localeCompare(b.id);
+}
+
+function compareItemCreatedAt(a: string | undefined, b: string | undefined): number {
+  const aTime = Date.parse(a ?? '');
+  const bTime = Date.parse(b ?? '');
+  if (Number.isFinite(aTime) && Number.isFinite(bTime) && aTime !== bTime) return aTime - bTime;
+  if (Number.isFinite(aTime) !== Number.isFinite(bTime)) return Number.isFinite(aTime) ? -1 : 1;
+  return 0;
+}
+
 function toPhotoRecord(row: Record<string, unknown>, files: Array<Record<string, unknown>>): PhotoRecord {
   const variants = files.map((file) => ({
     kind: String(file.kind) as 'original' | 'thumbnail' | 'preview' | 'large',
@@ -488,6 +625,14 @@ function toPhotoRecord(row: Record<string, unknown>, files: Array<Record<string,
   const metadata = objectValue(row.metadata);
   const locationName = stringValue(row.locationName) ?? stringValue(metadata.locationName);
   const locationId = stringValue(row.locationId) ?? (locationName ? `photo-${String(row.id)}-location` : undefined);
+  const importBatchId = stringValue(row.importBatchId);
+  const importBatchCreatedAt = toIsoString(row.importBatchCreatedAt);
+  const importBatch = importBatchId && importBatchCreatedAt ? {
+    id: importBatchId,
+    createdAt: importBatchCreatedAt,
+    itemCreatedAt: toIsoString(row.importItemCreatedAt) ?? undefined,
+    sourceKey: stringValue(row.importSourceKey),
+  } : undefined;
   return {
     id: String(row.id),
     workspaceId: String(row.workspaceId),
@@ -507,6 +652,7 @@ function toPhotoRecord(row: Record<string, unknown>, files: Array<Record<string,
     latitude,
     longitude,
     metadata: { ...metadata, ...(latitude == null && longitude == null ? {} : { latitude, longitude }) },
+    ...(importBatch ? { importBatch } : {}),
   };
 }
 

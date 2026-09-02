@@ -66,6 +66,7 @@ export type AdminPhoto = {
   latitude?: number;
   longitude?: number;
   metadata?: Record<string, unknown>;
+  importBatch?: { id: string; createdAt: string; itemCreatedAt?: string; sourceKey?: string };
 };
 
 export async function fetchWorkspaces(token: string): Promise<Workspace[]> {

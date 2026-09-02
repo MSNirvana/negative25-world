@@ -5,14 +5,15 @@ test.beforeEach(async ({ page }) => {
     localStorage.setItem('negative25.locale', 'en');
     localStorage.setItem('negative25.session', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh', expiresIn: 3600 }));
   });
-  const photo = (id: string, title: string, rating: number) => ({
+  const photo = (id: string, title: string, rating: number, importBatch?: { id: string; createdAt: string }) => ({
     id, workspaceId: 'workspace-1', title, description: '', published: true, hidden: false, ownerOnly: false, rating,
     thumbnail: { kind: 'thumbnail', url: `https://example.com/${id}-thumb.jpg`, width: 300, height: 200, format: 'jpeg' },
     media: [{ kind: 'large', url: `https://example.com/${id}-large.jpg`, width: 1200, height: 800, format: 'jpeg' }],
     location: { id: `${id}-location`, name: 'Beijing' }, latitude: 39.9, longitude: 116.4,
     metadata: { displayAddress: 'Forbidden City', displayRegion: 'Beijing', displayRegionEnabled: true, latitude: 39.9, longitude: 116.4 },
+    importBatch,
   });
-  const photos = [photo('source', 'Source frame', 7), photo('target', 'Target frame', 3), photo('third', 'Third frame', 5)];
+  const photos = [photo('source', 'Source frame', 7, { id: 'batch-new', createdAt: '2026-09-02T10:00:00.000Z' }), photo('target', 'Target frame', 3, { id: 'batch-new', createdAt: '2026-09-02T10:00:00.000Z' }), photo('third', 'Third frame', 5, { id: 'batch-old', createdAt: '2026-09-01T10:00:00.000Z' })];
   await page.route('**/api/v1/auth/me', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user-1', username: 'owner', email: 'owner@n25.world', name: 'Owner', emailVerifiedAt: null }) }));
   await page.route('**/api/v1/workspaces', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'workspace-1', slug: 'primary', name: 'negative25', role: 'owner' }]) }));
   await page.route('**/api/v1/admin/spaces/primary/photos', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(photos) }));
@@ -36,6 +37,16 @@ test('selects photos, copies source metadata, and previews thumbnails', async ({
   await expect(page.getByRole('dialog', { name: 'Preview photo' })).toBeVisible();
   await page.locator('.photo-preview-overlay').click({ position: { x: 8, y: 8 } });
   await expect(page.getByRole('dialog', { name: 'Preview photo' })).toHaveCount(0);
+});
+
+test('groups photos by import batch and keeps each group together', async ({ page }) => {
+  await page.goto('/account/photos');
+  const headings = page.locator('.photo-batch-heading');
+  await expect(headings).toHaveCount(2);
+  await expect(headings.nth(0)).toContainText('Import batch');
+  await expect(headings.nth(0)).toContainText('2 photos');
+  await expect(headings.nth(1)).toContainText('1 photo');
+  await expect(page.locator('.photo-row')).toHaveCount(3);
 });
 
 test('deletes one selected photo after confirmation', async ({ page }) => {

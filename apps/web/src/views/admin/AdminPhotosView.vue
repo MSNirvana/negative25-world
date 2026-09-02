@@ -4,6 +4,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { copyAdminPhotoFields, deleteAdminPhoto, deleteAdminPhotos, isApiConfigured, listAdminPhotos, patchAdminPhoto, type AdminPhoto, type AdminPhotoCopyField } from '../../api/client';
 import AdminLocationPicker from '../../components/admin/AdminLocationPicker.vue';
+import { groupAdminPhotos, type AdminPhotoGroup } from '../../lib/admin-photo-groups';
 import { formatPhotoDisplayLocation } from '../../lib/photo-display-location';
 import { useSessionStore } from '../../stores/session';
 import { useWorkspaceStore } from '../../stores/workspace';
@@ -25,7 +26,7 @@ const draft = ref({ title: '', description: '', rating: '', locationName: '', di
 const saving = ref(false);
 const actionBusy = ref<'copy' | 'delete' | null>(null);
 const notice = ref<string | null>(null);
-const { t } = useLocale();
+const { locale, t } = useLocale();
 async function loadPhotos(): Promise<void> {
   if (!isApiConfigured() || !session.accessToken) return;
   loading.value = true;
@@ -62,6 +63,7 @@ const filteredPhotos = computed(() => {
     return candidates.some((value) => value.toLocaleLowerCase().includes(locationNeedle));
   });
 });
+const groupedFilteredPhotos = computed<AdminPhotoGroup[]>(() => groupAdminPhotos(filteredPhotos.value));
 const selectedPhotos = computed(() => selectedIds.value.map((id) => photos.value.find((photo) => photo.id === id)).filter((photo): photo is ViewPhoto => Boolean(photo)));
 const selectedCount = computed(() => selectedPhotos.value.length);
 const allFilteredSelected = computed(() => filteredPhotos.value.length > 0 && filteredPhotos.value.every((photo) => selectedIds.value.includes(photo.id)));
@@ -204,6 +206,14 @@ function locationLabel(photo: ViewPhoto): string {
   const standardName = photo.location?.name || (latitude !== null && longitude !== null ? `${latitude.toFixed(5)}, ${longitude.toFixed(5)}` : '');
   return formatPhotoDisplayLocation({ standardName, displayAddress: metadata.displayAddress, displayRegion: metadata.displayRegion, displayRegionEnabled: metadata.displayRegionEnabled }, t('admin.unspecifiedLocation'));
 }
+function formatBatchDate(value: string): string {
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return value;
+  return new Intl.DateTimeFormat(locale.value === 'zh' ? 'zh-CN' : 'en-US', { dateStyle: 'medium', timeStyle: 'short' }).format(date);
+}
+function batchLabel(group: AdminPhotoGroup): string {
+  return group.importBatch ? t('admin.importBatch', { date: formatBatchDate(group.importBatch.createdAt) }) : t('admin.unclassifiedPhotos');
+}
 function applyLocation(selection: { name: string; displayAddress: string; region: string; latitude: number; longitude: number }): void {
   draft.value.locationName = selection.name;
   draft.value.displayAddress = selection.displayAddress;
@@ -257,17 +267,22 @@ function replacePhotoById(next: AdminPhoto): void {
       <div v-if="!filteredPhotos.length" class="loading-line filtered-empty">{{ t('admin.noFilteredPhotos') }}</div>
       <div v-else class="photo-table" role="table">
         <div class="table-head" role="row"><span></span><span>{{ t('admin.tablePhoto') }}</span><span>{{ t('admin.tablePlace') }}</span><span>{{ t('admin.tableStatus') }}</span><span></span></div>
-        <template v-for="photo in filteredPhotos" :key="photo.id">
-          <div class="photo-row" :class="{ selected: isSelected(photo.id) }" role="row"><label class="row-check"><input type="checkbox" :checked="isSelected(photo.id)" :aria-label="t('admin.editPhoto')" @change="toggleSelected(photo.id)" /></label><div class="photo-name"><button v-if="photo.thumbnail?.url" type="button" class="thumb-button" :aria-label="t('admin.previewPhoto')" @click.stop="openPreview(photo)"><img class="mini-thumb" :src="photo.thumbnail.url" :alt="photo.title" /></button><span v-else class="mini-thumb"></span><strong>{{ photo.title || t('admin.untitledPhoto') }}</strong></div><span class="muted">{{ locationLabel(photo) }}</span><select class="status-select" :value="photoStatus(photo)" :disabled="statusSavingId === photo.id" :aria-label="t('admin.tableStatus')" @change="changeStatus(photo, $event)"><option value="published">{{ t('admin.published') }}</option><option value="ownerOnly">{{ t('admin.ownerOnly') }}</option><option value="hidden">{{ t('admin.hidden') }}</option></select><span class="row-actions"><button class="delete-single" type="button" :aria-label="t('admin.deletePhoto')" :title="t('admin.deletePhoto')" :disabled="!canMutate" @click="removeOne(photo)"><Trash2 :size="15" /></button><button class="more" type="button" :aria-label="t('admin.editPhoto')" @click="beginEdit(photo)">...</button></span></div>
-          <form v-if="editingId === photo.id" class="editor" @submit.prevent="saveEdit(photo)">
-            <div class="editor-fields"><label>{{ t('admin.title') }}<input v-model="draft.title" maxlength="240" required /></label><label>{{ t('admin.description') }}<textarea v-model="draft.description" maxlength="5000" rows="3"></textarea></label><label>{{ t('admin.rating') }}<input v-model="draft.rating" inputmode="numeric" min="0" max="7" :placeholder="t('admin.ratingPlaceholder')" /></label></div>
-            <AdminLocationPicker :name="draft.locationName" :latitude="draft.latitude" :longitude="draft.longitude" :disabled="saving" @select="applyLocation" @clear="clearLocation" />
-            <div class="display-location-fields">
-              <label>{{ t('admin.displayAddress') }}<input v-model="draft.displayAddress" maxlength="240" :placeholder="t('admin.displayAddressPlaceholder')" :disabled="saving" /></label>
-              <label class="prefix-toggle"><input v-model="draft.displayRegionEnabled" type="checkbox" :disabled="saving || draft.latitude === null || draft.longitude === null" /><span>{{ t('admin.displayRegionPrefix') }}<small v-if="draft.displayRegion">{{ draft.displayRegion }}</small></span></label>
-            </div>
-            <div class="editor-actions"><button type="submit" class="save" :disabled="saving"><Check :size="15" /> {{ saving ? t('admin.saving') : t('admin.saveDetails') }}</button><button type="button" class="cancel" @click="cancelEdit"><X :size="15" /> {{ t('admin.cancel') }}</button></div>
-          </form>
+        <template v-for="group in groupedFilteredPhotos" :key="group.key">
+          <div class="photo-batch-heading" :class="{ unclassified: !group.importBatch }">
+            <strong>{{ batchLabel(group) }}</strong><span>{{ t('admin.batchPhotoCount', { count: group.photos.length }) }}</span>
+          </div>
+          <template v-for="photo in group.photos" :key="photo.id">
+            <div class="photo-row" :class="{ selected: isSelected(photo.id) }" role="row"><label class="row-check"><input type="checkbox" :checked="isSelected(photo.id)" :aria-label="t('admin.editPhoto')" @change="toggleSelected(photo.id)" /></label><div class="photo-name"><button v-if="photo.thumbnail?.url" type="button" class="thumb-button" :aria-label="t('admin.previewPhoto')" @click.stop="openPreview(photo)"><img class="mini-thumb" :src="photo.thumbnail.url" :alt="photo.title" /></button><span v-else class="mini-thumb"></span><strong>{{ photo.title || t('admin.untitledPhoto') }}</strong></div><span class="muted">{{ locationLabel(photo) }}</span><select class="status-select" :value="photoStatus(photo)" :disabled="statusSavingId === photo.id" :aria-label="t('admin.tableStatus')" @change="changeStatus(photo, $event)"><option value="published">{{ t('admin.published') }}</option><option value="ownerOnly">{{ t('admin.ownerOnly') }}</option><option value="hidden">{{ t('admin.hidden') }}</option></select><span class="row-actions"><button class="delete-single" type="button" :aria-label="t('admin.deletePhoto')" :title="t('admin.deletePhoto')" :disabled="!canMutate" @click="removeOne(photo)"><Trash2 :size="15" /></button><button class="more" type="button" :aria-label="t('admin.editPhoto')" @click="beginEdit(photo)">...</button></span></div>
+            <form v-if="editingId === photo.id" class="editor" @submit.prevent="saveEdit(photo)">
+              <div class="editor-fields"><label>{{ t('admin.title') }}<input v-model="draft.title" maxlength="240" required /></label><label>{{ t('admin.description') }}<textarea v-model="draft.description" maxlength="5000" rows="3"></textarea></label><label>{{ t('admin.rating') }}<input v-model="draft.rating" inputmode="numeric" min="0" max="7" :placeholder="t('admin.ratingPlaceholder')" /></label></div>
+              <AdminLocationPicker :name="draft.locationName" :latitude="draft.latitude" :longitude="draft.longitude" :disabled="saving" @select="applyLocation" @clear="clearLocation" />
+              <div class="display-location-fields">
+                <label>{{ t('admin.displayAddress') }}<input v-model="draft.displayAddress" maxlength="240" :placeholder="t('admin.displayAddressPlaceholder')" :disabled="saving" /></label>
+                <label class="prefix-toggle"><input v-model="draft.displayRegionEnabled" type="checkbox" :disabled="saving || draft.latitude === null || draft.longitude === null" /><span>{{ t('admin.displayRegionPrefix') }}<small v-if="draft.displayRegion">{{ draft.displayRegion }}</small></span></label>
+              </div>
+              <div class="editor-actions"><button type="submit" class="save" :disabled="saving"><Check :size="15" /> {{ saving ? t('admin.saving') : t('admin.saveDetails') }}</button><button type="button" class="cancel" @click="cancelEdit"><X :size="15" /> {{ t('admin.cancel') }}</button></div>
+            </form>
+          </template>
         </template>
       </div>
     </div>
@@ -279,7 +294,7 @@ function replacePhotoById(next: AdminPhoto): void {
 </template>
 
 <style scoped>
-.admin-view { max-width: 900px; position: relative; }.view-heading { align-items: flex-end; display: flex; justify-content: space-between; margin-bottom: 47px; }.view-heading h2 { font-size: 37px; letter-spacing: -.045em; margin: 10px 0 6px; }.view-heading p { color: var(--muted); margin: 0; }.primary-action { align-items: center; background: var(--ink); border-radius: 4px; color: var(--paper); display: inline-flex; font-size: 13px; gap: 8px; padding: 11px 15px; }.photo-table { border-top: 1px solid var(--line); }.table-head, .photo-row { align-items: center; display: grid; gap: 14px; grid-template-columns: 25px minmax(190px, 1.5fr) 1fr 120px 58px; }.table-head { color: var(--muted); font-size: 11px; letter-spacing: .08em; padding: 13px 0; text-transform: uppercase; }.photo-row { border-top: 1px solid var(--line); font-size: 13px; padding: 15px 0; }.photo-row.selected { background: color-mix(in srgb, var(--accent) 7%, transparent); }.photo-name { align-items: center; display: flex; gap: 11px; min-width: 0; }.mini-thumb { background: var(--surface-soft); border-radius: 3px; height: 35px; object-fit: cover; width: 48px; }.thumb-button { background: transparent; border-radius: 4px; display: inline-flex; padding: 0; }.thumb-button:hover, .thumb-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }.row-check { align-items: center; display: inline-flex; justify-content: center; }.row-check input, .select-all input { accent-color: var(--accent-deep); height: 15px; margin: 0; width: 15px; }.row-actions { align-items: center; display: inline-flex; gap: 3px; justify-content: flex-end; }.delete-single { align-items: center; background: transparent; border-radius: 4px; color: var(--muted); display: inline-flex; justify-content: center; padding: 5px; }.delete-single:hover:not(:disabled) { background: color-mix(in srgb, #a34d4d 12%, transparent); color: #a34d4d; }.delete-single:disabled { cursor: wait; opacity: .45; }.status { align-items: center; background: transparent; color: var(--muted); display: inline-flex; font-size: 11px; gap: 5px; padding: 4px 0; }.status.published { color: #4f7e62; }.more { background: transparent; color: var(--muted); font-size: 15px; letter-spacing: 2px; padding: 4px; }.more:hover { color: var(--ink); }
+.admin-view { max-width: 900px; position: relative; }.view-heading { align-items: flex-end; display: flex; justify-content: space-between; margin-bottom: 47px; }.view-heading h2 { font-size: 37px; letter-spacing: -.045em; margin: 10px 0 6px; }.view-heading p { color: var(--muted); margin: 0; }.primary-action { align-items: center; background: var(--ink); border-radius: 4px; color: var(--paper); display: inline-flex; font-size: 13px; gap: 8px; padding: 11px 15px; }.photo-table { border-top: 1px solid var(--line); }.table-head, .photo-row { align-items: center; display: grid; gap: 14px; grid-template-columns: 25px minmax(190px, 1.5fr) 1fr 120px 58px; }.table-head { color: var(--muted); font-size: 11px; letter-spacing: .08em; padding: 13px 0; text-transform: uppercase; }.photo-batch-heading { align-items: baseline; background: var(--surface-soft); border-top: 1px solid var(--line); color: var(--ink); display: flex; gap: 10px; justify-content: space-between; padding: 11px 12px 9px; }.photo-batch-heading strong { font-size: 12px; font-weight: 650; }.photo-batch-heading span { color: var(--muted); font-size: 11px; }.photo-batch-heading.unclassified { color: var(--muted); }.photo-row { border-top: 1px solid var(--line); font-size: 13px; padding: 15px 0; }.photo-row.selected { background: color-mix(in srgb, var(--accent) 7%, transparent); }.photo-name { align-items: center; display: flex; gap: 11px; min-width: 0; }.mini-thumb { background: var(--surface-soft); border-radius: 3px; height: 35px; object-fit: cover; width: 48px; }.thumb-button { background: transparent; border-radius: 4px; display: inline-flex; padding: 0; }.thumb-button:hover, .thumb-button:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }.row-check { align-items: center; display: inline-flex; justify-content: center; }.row-check input, .select-all input { accent-color: var(--accent-deep); height: 15px; margin: 0; width: 15px; }.row-actions { align-items: center; display: inline-flex; gap: 3px; justify-content: flex-end; }.delete-single { align-items: center; background: transparent; border-radius: 4px; color: var(--muted); display: inline-flex; justify-content: center; padding: 5px; }.delete-single:hover:not(:disabled) { background: color-mix(in srgb, #a34d4d 12%, transparent); color: #a34d4d; }.delete-single:disabled { cursor: wait; opacity: .45; }.status { align-items: center; background: transparent; color: var(--muted); display: inline-flex; font-size: 11px; gap: 5px; padding: 4px 0; }.status.published { color: #4f7e62; }.more { background: transparent; color: var(--muted); font-size: 15px; letter-spacing: 2px; padding: 4px; }.more:hover { color: var(--ink); }
 .form-error { color: #a34d4d; font-size: 12px; margin: -25px 0 24px; }.loading-line { color: var(--muted); padding: 60px 0; text-align: center; }
 @media (max-width: 700px) { .view-heading { align-items: flex-start; flex-direction: column; gap: 21px; }.table-head { display: none; }.photo-row { gap: 8px; grid-template-columns: 24px minmax(145px, 1fr) auto 52px; }.photo-row > .muted { display: none; }.status-select { min-width: 92px; }.row-actions { gap: 0; }.more { padding: 4px 2px; } }
 .editor { background: var(--surface-soft); border-top: 1px solid var(--line); display: grid; gap: 18px; padding: 18px 20px 20px; }

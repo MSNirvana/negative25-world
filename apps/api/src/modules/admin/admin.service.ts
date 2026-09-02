@@ -1,8 +1,8 @@
 import { ApiError, type ElevationCoordinate } from '@negative25/utils';
-import { isPhotoPublic, type AppRepository, type PhotoLocationRecord, type PhotoRecord, type WorkspaceMemberRecord } from '../../db/repository.js';
+import { isPhotoPublic, type AppRepository, type PhotoImportBatch, type PhotoLocationRecord, type PhotoRecord, type WorkspaceMemberRecord } from '../../db/repository.js';
 import type { StorageAdapter } from '../media/storage.js';
 
-export type AdminPhoto = Pick<PhotoRecord, 'id' | 'workspaceId' | 'title' | 'description' | 'published' | 'hidden' | 'ownerOnly' | 'rating' | 'location' | 'latitude' | 'longitude' | 'metadata' | 'thumbnail' | 'media'>;
+export type AdminPhoto = Pick<PhotoRecord, 'id' | 'workspaceId' | 'title' | 'description' | 'published' | 'hidden' | 'ownerOnly' | 'rating' | 'location' | 'latitude' | 'longitude' | 'metadata' | 'thumbnail' | 'media'> & { importBatch?: PhotoImportBatch };
 export type AdminPhotoLocationPatch = { name: string; latitude: number; longitude: number; displayAddress?: string; displayRegion?: string; displayRegionEnabled?: boolean } | null;
 export type AdminPhotoPatch = Partial<Pick<AdminPhoto, 'title' | 'description' | 'published' | 'hidden' | 'ownerOnly' | 'rating'>> & { location?: AdminPhotoLocationPatch };
 export type AdminPhotoCopyField = 'location' | 'address' | 'rating';
@@ -11,11 +11,11 @@ export type ElevationLookup = (coordinate: ElevationCoordinate) => Promise<numbe
 
 export class AdminService {
   constructor(private readonly repository: AppRepository, private readonly lookupElevation: ElevationLookup = () => Promise.resolve(undefined), private readonly storage?: StorageAdapter) {}
-  async listPhotos(actor: AdminActor): Promise<AdminPhoto[]> { this.requireRole(actor, ['owner', 'admin', 'editor', 'viewer']); return (await this.repository.listPhotos(actor.workspaceId)) as AdminPhoto[]; }
+  async listPhotos(actor: AdminActor): Promise<AdminPhoto[]> { this.requireRole(actor, ['owner', 'admin', 'editor', 'viewer']); return (await this.repository.listPhotos(actor.workspaceId, { includeImportBatch: true })) as AdminPhoto[]; }
   async summary(actor: AdminActor) { this.requireRole(actor, ['owner', 'admin', 'editor', 'viewer']); return this.repository.getWorkspaceSummary(actor.workspaceId); }
   async patchPhoto(actor: AdminActor, id: string, patch: AdminPhotoPatch): Promise<AdminPhoto> {
     this.requireRole(actor, ['owner', 'admin', 'editor']);
-    const photo = await this.repository.findPhoto(actor.workspaceId, id);
+    const photo = await this.repository.findPhoto(actor.workspaceId, id, { includeImportBatch: true });
     if (!photo) throw new ApiError('NOT_FOUND', 'Photo not found');
     const { location, ownerOnly, ...photoPatch } = patch;
     let metadataPatch: Record<string, unknown> | undefined;
@@ -70,7 +70,7 @@ export class AdminService {
         location: location && location.name.trim() ? { id: `photo-${photo.id}-location`, name: location.name.trim() } satisfies PhotoLocationRecord : null,
       });
     }
-    const updated = await this.repository.updatePhoto(id, actor.workspaceId, photoPatch);
+    const updated = await this.repository.updatePhoto(id, actor.workspaceId, photoPatch, { includeImportBatch: true });
     if (!updated) throw new ApiError('NOT_FOUND', 'Photo not found');
     return updated as AdminPhoto;
   }
@@ -78,13 +78,13 @@ export class AdminService {
     this.requireRole(actor, ['owner', 'admin', 'editor']);
     const uniqueFields = [...new Set(fields)];
     if (!uniqueFields.length) throw new ApiError('VALIDATION_ERROR', 'At least one photo field is required');
-    const source = await this.repository.findPhoto(actor.workspaceId, sourceId);
+    const source = await this.repository.findPhoto(actor.workspaceId, sourceId, { includeImportBatch: true });
     if (!source) throw new ApiError('NOT_FOUND', 'Source photo not found');
     const uniqueTargets = [...new Set(targetIds)].filter((id) => id !== sourceId);
     const skippedIds: string[] = [];
     const updated: AdminPhoto[] = [];
     for (const id of uniqueTargets) {
-      const target = await this.repository.findPhoto(actor.workspaceId, id);
+      const target = await this.repository.findPhoto(actor.workspaceId, id, { includeImportBatch: true });
       if (!target) { skippedIds.push(id); continue; }
       const patch: Partial<PhotoRecord> = {};
       const sourceMetadata = source.metadata ?? {};
@@ -132,7 +132,7 @@ export class AdminService {
         else delete metadata.displayRegionEnabled;
       }
       if (uniqueFields.includes('location') || uniqueFields.includes('address')) patch.metadata = metadata;
-      const result = await this.repository.updatePhoto(id, actor.workspaceId, patch);
+      const result = await this.repository.updatePhoto(id, actor.workspaceId, patch, { includeImportBatch: true });
       if (result) updated.push(result as AdminPhoto);
       else skippedIds.push(id);
     }

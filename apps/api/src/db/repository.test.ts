@@ -38,4 +38,29 @@ describe('repository adapters', () => {
     expect(await repository.searchPublicUsers('gavin')).toMatchObject([{ username: 'gavin', displayName: 'Gavin' }]);
     expect(await repository.listPublicPhotosForUser('gavin-user')).toHaveLength(1);
   });
+
+  it('orders photos by their latest completed import batch and keeps legacy photos last', async () => {
+    const repository = new MemoryRepository();
+    await repository.createBatch({
+      id: 'batch-old', workspaceId: PRIMARY_WORKSPACE_ID, actorId: 'owner', status: 'completed', createdAt: '2026-09-01T10:00:00.000Z',
+      items: [{ id: 'item-old', sourceKey: 'uploads/old.jpg', status: 'completed', checksum: 'shared', errors: [], warnings: [], resolvedFields: {} }], counts: { total: 1, completed: 1, failed: 0 },
+    });
+    await repository.createBatch({
+      id: 'batch-new', workspaceId: PRIMARY_WORKSPACE_ID, actorId: 'owner', status: 'completed', createdAt: '2026-09-02T10:00:00.000Z',
+      items: [
+        { id: 'item-new-a', sourceKey: 'uploads/a.jpg', status: 'completed', checksum: 'shared', errors: [], warnings: [], resolvedFields: {} },
+        { id: 'item-new-b', sourceKey: 'uploads/b.jpg', status: 'completed', checksum: 'new', errors: [], warnings: [], resolvedFields: {} },
+      ], counts: { total: 2, completed: 2, failed: 0 },
+    });
+    await repository.savePhoto({ id: 'photo-shared', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Shared', description: '', published: false, hidden: false, rating: null, checksum: 'shared' });
+    await repository.savePhoto({ id: 'photo-new', workspaceId: PRIMARY_WORKSPACE_ID, title: 'New', description: '', published: false, hidden: false, rating: null, checksum: 'new' });
+    await repository.savePhoto({ id: 'photo-legacy', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Legacy', description: '', published: false, hidden: false, rating: null, checksum: 'legacy' });
+
+    const photos = await repository.listPhotos(PRIMARY_WORKSPACE_ID, { includeImportBatch: true });
+
+    expect(photos.map((photo) => photo.id)).toEqual(['photo-shared', 'photo-new', 'photo-legacy', 'primary-photo-1']);
+    expect(photos[0]?.importBatch).toMatchObject({ id: 'batch-new', sourceKey: 'uploads/a.jpg' });
+    expect(photos[1]?.importBatch).toMatchObject({ id: 'batch-new', sourceKey: 'uploads/b.jpg' });
+    expect(photos[2]).not.toHaveProperty('importBatch');
+  });
 });

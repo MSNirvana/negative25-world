@@ -35,7 +35,7 @@ type PhotoImportBatch = {
 };
 ```
 
-`PhotoRecord` 和 `AdminPhoto` 暴露 `importBatch?: PhotoImportBatch`。这些是兼容性扩展，公开接口即使携带额外字段也不改变现有字段含义。
+`PhotoRecord` 和 `AdminPhoto` 暴露 `importBatch?: PhotoImportBatch`。仓储查询通过 `includeImportBatch` 选项显式开启，只有后台照片管理使用该选项；公开图库继续使用原有字段，内部 source key 不会泄露到前台。
 
 ### 排序
 
