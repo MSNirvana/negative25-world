@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
+import { computed, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import { fetchDiscoverLocations, isApiConfigured } from '../api/client';
 import DiscoverMap from '../components/DiscoverMap.vue';
@@ -24,10 +24,12 @@ const selectedLocationOverride = ref<DiscoverLocation | null>(null);
 const mobile = ref(false);
 let mediaQuery: MediaQueryList | null = null;
 let locationRequest: AbortController | null = null;
+let refreshSequence = 0;
 const { t } = useLocale();
 
-const locations = computed(() => normalizeLocations(locationRecords.value.map((location) => ({ id: location.id, name: location.name, latitude: location.latitude, longitude: location.longitude, photoIds: location.photoIds })), gallery.photos));
-const unlocatedPhotos = computed(() => gallery.photos.filter((photo) => !photo.coordinates));
+const discoverPhotoCatalog = computed<GalleryPhoto[]>(() => gallery.locationPhotos.length ? gallery.locationPhotos : gallery.photos);
+const locations = computed(() => normalizeLocations(locationRecords.value.map((location) => ({ id: location.id, name: location.name, latitude: location.latitude, longitude: location.longitude, photoIds: location.photoIds })), discoverPhotoCatalog.value));
+const unlocatedPhotos = computed(() => discoverPhotoCatalog.value.filter((photo) => !photo.coordinates));
 const routeSlug = computed(() => typeof route.params.slug === 'string' ? route.params.slug : null);
 const placeQuery = computed(() => typeof route.query.place === 'string' ? route.query.place : null);
 const selectedLocation = computed<DiscoverLocation | null>(() => {
@@ -67,23 +69,59 @@ function backToMap(): void {
   }
 }
 
-onMounted(async () => {
+async function refreshDiscoverData(): Promise<void> {
+  const requestId = ++refreshSequence;
+  locationRequest?.abort();
+  const controller = new AbortController();
+  locationRequest = controller;
+  locationError.value = null;
+
+  const username = typeof route.query.user === 'string' ? route.query.user : null;
+  const profile = await publicViewer.load(username);
+  if (controller.signal.aborted || requestId !== refreshSequence) return;
+
+  const nextSpaceSlug = profile?.workspaceSlug ?? 'primary';
+  const spaceChanged = gallery.spaceSlug !== nextSpaceSlug;
+  if (spaceChanged) {
+    locationRecords.value = [];
+    selectedId.value = null;
+    selectedLocationOverride.value = null;
+  }
+  gallery.setContext(nextSpaceSlug, null);
+  void gallery.load('featured');
+  void gallery.loadLocationCatalog(true);
+  if (!isApiConfigured()) return;
+
+  try {
+    const records = await fetchDiscoverLocations(undefined, controller.signal, nextSpaceSlug);
+    if (controller.signal.aborted || requestId !== refreshSequence || gallery.spaceSlug !== nextSpaceSlug) return;
+    locationRecords.value = records;
+  } catch (cause: unknown) {
+    if (controller.signal.aborted || requestId !== refreshSequence) return;
+    locationError.value = cause instanceof Error ? cause.message : t('discover.locationUnavailable');
+  }
+}
+
+function handleVisibilityChange(): void {
+  if (document.visibilityState === 'visible') void refreshDiscoverData();
+}
+
+onMounted(() => {
   updateMobile();
   mediaQuery = window.matchMedia('(max-width: 680px)');
   updateMobile();
   mediaQuery.addEventListener('change', updateMobile);
-  const username = typeof route.query.user === 'string' ? route.query.user : null;
-  const profile = username ? await publicViewer.load(username) : null;
-  if (profile?.workspaceSlug) gallery.setContext(profile.workspaceSlug, null);
-  void gallery.load('featured');
-  if (!isApiConfigured()) return;
-  locationRequest = new AbortController();
-  void fetchDiscoverLocations(undefined, locationRequest.signal, gallery.spaceSlug).then((records) => { locationRecords.value = records; }).catch((cause: unknown) => {
-    if (locationRequest?.signal.aborted) return;
-    locationError.value = cause instanceof Error ? cause.message : t('discover.locationUnavailable');
-  });
+  document.addEventListener('visibilitychange', handleVisibilityChange);
+  void refreshDiscoverData();
 });
-onBeforeUnmount(() => { mediaQuery?.removeEventListener('change', updateMobile); locationRequest?.abort(); });
+watch(() => route.query.user, () => { void refreshDiscoverData(); });
+onActivated(() => { void refreshDiscoverData(); });
+onBeforeUnmount(() => {
+  refreshSequence += 1;
+  mediaQuery?.removeEventListener('change', updateMobile);
+  document.removeEventListener('visibilitychange', handleVisibilityChange);
+  locationRequest?.abort();
+});
 </script>
 
 <template>

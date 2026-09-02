@@ -7,7 +7,6 @@ import { buildLocationOptions, displayLocationLabel, type LocationOption } from 
 
 const props = defineProps<{ active: boolean; selectedLocation: string | null; photos: readonly GalleryPhoto[] }>();
 const emit = defineEmits<{
-  (event: 'select-mode'): void;
   (event: 'select-location', value: string | null): void;
 }>();
 
@@ -17,6 +16,7 @@ const popover = ref<HTMLElement | null>(null);
 const searchInput = ref<HTMLInputElement | null>(null);
 const open = ref(false);
 const query = ref('');
+const pendingLocation = ref<string | null>(props.selectedLocation);
 const popoverPosition = ref({ left: 16, top: 16 });
 const options = computed(() => buildLocationOptions(props.photos));
 const chinaOptions = computed(() => filterOptions(options.value.filter((option) => option.group === 'china')));
@@ -29,17 +29,28 @@ function filterOptions(values: LocationOption[]): LocationOption[] {
   return values.filter((option) => `${option.label} ${option.labelEn}`.toLocaleLowerCase().includes(needle));
 }
 function toggle(): void {
+  if (open.value) {
+    closePicker();
+    return;
+  }
+  pendingLocation.value = props.selectedLocation;
   open.value = !open.value;
-  emit('select-mode');
   if (open.value) void nextTick(() => {
     updatePopoverPosition();
     searchInput.value?.focus();
   });
 }
 function selectLocation(value: string | null): void {
-  emit('select-location', value);
+  pendingLocation.value = value;
+}
+function confirmLocation(): void {
+  emit('select-location', pendingLocation.value);
+  closePicker();
+}
+function closePicker(): void {
   open.value = false;
   query.value = '';
+  pendingLocation.value = props.selectedLocation;
 }
 function updatePopoverPosition(): void {
   const trigger = root.value?.getBoundingClientRect();
@@ -53,10 +64,11 @@ function updatePopoverPosition(): void {
 }
 function closeOnOutside(event: PointerEvent): void {
   const target = event.target as Node;
-  if (!root.value?.contains(target) && !popover.value?.contains(target)) open.value = false;
+  if (!root.value?.contains(target) && !popover.value?.contains(target)) closePicker();
 }
-function closeOnEscape(event: KeyboardEvent): void { if (event.key === 'Escape') open.value = false; }
-watch(() => props.active, (active) => { if (!active) open.value = false; });
+function closeOnEscape(event: KeyboardEvent): void { if (event.key === 'Escape') closePicker(); }
+watch(() => props.active, (active) => { if (!active && open.value) closePicker(); });
+watch(() => props.selectedLocation, (value) => { if (!open.value) pendingLocation.value = value; });
 onMounted(() => {
   document.addEventListener('pointerdown', closeOnOutside);
   document.addEventListener('keydown', closeOnEscape);
@@ -82,7 +94,7 @@ onBeforeUnmount(() => {
     <div v-if="open" ref="popover" class="location-popover" role="dialog" :aria-label="t('gallery.locationHeading')" :style="{ left: `${popoverPosition.left}px`, top: `${popoverPosition.top}px` }">
       <div class="location-popover-head">
         <strong>{{ t('gallery.locationHeading') }}</strong>
-        <button class="location-close" type="button" :aria-label="t('gallery.closeLocationPicker')" @click="open = false"><X :size="15" aria-hidden="true" /></button>
+        <button class="location-close" type="button" :aria-label="t('gallery.closeLocationPicker')" @click="closePicker"><X :size="15" aria-hidden="true" /></button>
       </div>
       <label class="location-search">
         <Search :size="14" aria-hidden="true" />
@@ -91,27 +103,31 @@ onBeforeUnmount(() => {
         <button v-if="query" type="button" class="clear-search" :aria-label="t('gallery.clearLocationSearch')" @click="query = ''"><X :size="13" aria-hidden="true" /></button>
       </label>
       <div class="location-options" role="listbox" :aria-label="t('gallery.locationHeading')">
-        <button class="all-location" type="button" role="option" :aria-selected="selectedLocation === null" @click="selectLocation(null)">
+        <button class="all-location" type="button" role="option" :aria-selected="pendingLocation === null" @click="selectLocation(null)">
           <span>{{ t('gallery.allLocations') }}</span>
-          <Check v-if="selectedLocation === null" :size="14" aria-hidden="true" />
+          <Check v-if="pendingLocation === null" :size="14" aria-hidden="true" />
         </button>
         <section v-if="chinaOptions.length" class="location-section">
           <h3>{{ t('gallery.china') }}</h3>
-          <button v-for="option in chinaOptions" :key="option.id" class="location-option" type="button" role="option" :disabled="!option.available" :aria-selected="selectedLocation === option.id" @click="selectLocation(option.id)">
+          <button v-for="option in chinaOptions" :key="option.id" class="location-option" type="button" role="option" :disabled="!option.available" :aria-selected="pendingLocation === option.id" @click="selectLocation(option.id)">
             <span>{{ displayLocationLabel(option, locale) }}</span>
             <small v-if="option.available">{{ option.count }}</small>
-            <Check v-if="selectedLocation === option.id" :size="14" aria-hidden="true" />
+            <Check v-if="pendingLocation === option.id" :size="14" aria-hidden="true" />
           </button>
         </section>
         <section v-if="otherOptions.length" class="location-section">
           <h3>{{ t('gallery.otherRegions') }}</h3>
-          <button v-for="option in otherOptions" :key="option.id" class="location-option" type="button" role="option" :aria-selected="selectedLocation === option.id" @click="selectLocation(option.id)">
+          <button v-for="option in otherOptions" :key="option.id" class="location-option" type="button" role="option" :aria-selected="pendingLocation === option.id" @click="selectLocation(option.id)">
             <span>{{ displayLocationLabel(option, locale) }}</span>
             <small>{{ option.count }}</small>
-            <Check v-if="selectedLocation === option.id" :size="14" aria-hidden="true" />
+            <Check v-if="pendingLocation === option.id" :size="14" aria-hidden="true" />
           </button>
         </section>
         <p v-if="!hasResults" class="location-empty">{{ t('gallery.noLocationResults') }}</p>
+      </div>
+      <div class="location-actions">
+        <button type="button" class="location-cancel" @click="closePicker">{{ t('gallery.cancelLocation') }}</button>
+        <button type="button" class="location-confirm" @click="confirmLocation">{{ t('gallery.confirmLocation') }}</button>
       </div>
     </div>
     </Teleport>
@@ -124,7 +140,7 @@ onBeforeUnmount(() => {
 .location-trigger:hover, .location-trigger.active { border-bottom-color: var(--ink); color: var(--ink); opacity: 1; }
 .location-chevron { margin-left: -2px; opacity: .65; transition: transform .18s ease; }
 .location-trigger[aria-expanded='true'] .location-chevron { transform: rotate(180deg); }
-.location-popover { background: color-mix(in srgb, var(--surface) 98%, var(--paper)); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); color: var(--ink); display: grid; gap: 12px; grid-template-rows: auto auto minmax(0, 1fr); max-height: calc(100vh - 32px); padding: 14px; position: fixed; width: min(350px, calc(100vw - 32px)); z-index: 50; }
+.location-popover { background: color-mix(in srgb, var(--surface) 98%, var(--paper)); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); color: var(--ink); display: grid; gap: 12px; grid-template-rows: auto auto minmax(0, 1fr) auto; max-height: calc(100vh - 32px); padding: 14px; position: fixed; width: min(350px, calc(100vw - 32px)); z-index: 50; }
 .location-popover-head { align-items: center; display: flex; justify-content: space-between; }
 .location-popover-head strong { font-family: Georgia, ui-serif, serif; font-size: 15px; font-weight: 500; }
 .location-close, .clear-search { align-items: center; background: transparent; border: 0; color: var(--muted); display: inline-flex; justify-content: center; padding: 3px; }
@@ -145,6 +161,12 @@ onBeforeUnmount(() => {
 .location-option small { color: var(--muted); font-size: 10px; margin-left: auto; }
 .location-option svg { color: var(--accent-deep); flex: 0 0 auto; }
 .location-empty { color: var(--muted); font-size: 12px; margin: 12px 8px 8px; text-align: center; }
+.location-actions { border-top: 1px solid var(--line); display: flex; gap: 8px; justify-content: flex-end; padding-top: 10px; }
+.location-actions button { border-radius: 4px; font-size: 11px; padding: 7px 10px; }
+.location-cancel { background: transparent; color: var(--muted); }
+.location-cancel:hover { color: var(--ink); }
+.location-confirm { background: var(--ink); color: var(--paper); }
+.location-confirm:hover { opacity: .84; }
 @media (max-width: 580px) {
   .location-trigger { font-size: 15px; }
   .location-popover { max-width: calc(100vw - 32px); }

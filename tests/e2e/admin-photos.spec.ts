@@ -79,6 +79,7 @@ test('groups photos by import batch and keeps each group together', async ({ pag
   await expect(headings.nth(0)).toContainText('Import batch');
   await expect(headings.nth(0)).toContainText('2 photos');
   await expect(headings.nth(1)).toContainText('1 photo');
+  await headings.nth(1).locator('.batch-toggle').click();
   await expect(page.locator('.photo-row')).toHaveCount(3);
 });
 

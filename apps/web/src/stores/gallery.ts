@@ -54,9 +54,13 @@ export const useGalleryStore = defineStore('gallery', () => {
   const activePhoto = ref<GalleryPhoto | null>(null);
   const spaceSlug = ref('primary');
   const authToken = ref<string | null>(null);
+  const locationCatalogLoading = ref(false);
+  const locationCatalogReady = ref(false);
   const shuffleSeed = ref(nextShuffleSeed());
   let activeRequest: AbortController | null = null;
+  let locationCatalogRequest: AbortController | null = null;
   let requestSequence = 0;
+  let locationCatalogRequestSequence = 0;
   const visiblePhotos = computed(() => {
     let result = [...photos.value];
     if (!isApiConfigured()) {
@@ -79,14 +83,68 @@ export const useGalleryStore = defineStore('gallery', () => {
   function setContext(nextSpaceSlug: string, token: string | null): void {
     if (spaceSlug.value === nextSpaceSlug && authToken.value === token) return;
     activeRequest?.abort();
+    locationCatalogRequest?.abort();
+    locationCatalogRequest = null;
+    locationCatalogLoading.value = false;
     requestSequence += 1;
+    locationCatalogRequestSequence += 1;
     spaceSlug.value = nextSpaceSlug;
     authToken.value = token;
     photos.value = isApiConfigured() ? [] : demoPhotos;
     locationPhotos.value = isApiConfigured() ? [] : demoPhotos;
+    locationCatalogReady.value = false;
     nextCursor.value = null;
     nextCursorMode.value = null;
     activePhoto.value = null;
+  }
+  async function loadLocationCatalog(force = false): Promise<void> {
+    if (!isApiConfigured()) return;
+    if (locationCatalogLoading.value && !force) return;
+    if (locationCatalogReady.value && !force) return;
+    const previousCatalog = [...locationPhotos.value];
+    if (force) {
+      locationCatalogRequest?.abort();
+      locationCatalogRequest = null;
+      locationCatalogRequestSequence += 1;
+      locationCatalogLoading.value = false;
+      locationCatalogReady.value = false;
+      locationPhotos.value = [];
+    }
+    const controller = new AbortController();
+    const requestId = ++locationCatalogRequestSequence;
+    const requestSpaceSlug = spaceSlug.value;
+    const requestToken = authToken.value;
+    const catalog = new Map(locationPhotos.value.map((photo) => [photo.id, photo]));
+    locationCatalogRequest?.abort();
+    locationCatalogRequest = controller;
+    locationCatalogLoading.value = true;
+    let cursor: string | undefined;
+    const isCurrent = (): boolean => !controller.signal.aborted
+      && requestId === locationCatalogRequestSequence
+      && spaceSlug.value === requestSpaceSlug
+      && authToken.value === requestToken;
+    try {
+      const seenCursors = new Set<string>();
+      do {
+        const response = await fetchGallery('featured', cursor, controller.signal, undefined, requestSpaceSlug, requestToken, 100);
+        if (!isCurrent()) return;
+        for (const photo of response.photos.map(toGalleryPhoto)) catalog.set(photo.id, photo);
+        locationPhotos.value = [...catalog.values()];
+        const next = response.pagination.nextCursor;
+        if (!next || seenCursors.has(next)) break;
+        seenCursors.add(next);
+        cursor = next;
+      } while (true);
+      if (isCurrent()) locationCatalogReady.value = true;
+    } catch {
+      // Keep successfully fetched pages available for the picker.
+      if (isCurrent() && previousCatalog.length && !locationPhotos.value.length) locationPhotos.value = previousCatalog;
+    } finally {
+      if (locationCatalogRequest === controller) {
+        locationCatalogRequest = null;
+        locationCatalogLoading.value = false;
+      }
+    }
   }
   function openPhoto(photo: GalleryPhoto): void { activePhoto.value = photo; }
   function closePhoto(): void { activePhoto.value = null; }
@@ -105,19 +163,11 @@ export const useGalleryStore = defineStore('gallery', () => {
     loading.value = true;
     error.value = null;
     try {
-      if (nextMode === 'location' && selectedLocation.value && !locationPhotos.value.length) {
-        const catalog = await fetchGallery('featured', undefined, controller.signal, undefined, spaceSlug.value, authToken.value, 100);
-        if (controller.signal.aborted) return;
-        locationPhotos.value = catalog.photos.map(toGalleryPhoto);
-      }
       const response = await fetchGallery(nextMode, requestCursor, controller.signal, nextMode === 'location' ? selectedLocation.value ?? undefined : undefined, requestSpaceSlug, requestToken, undefined, requestSeed);
       if (controller.signal.aborted || requestId !== requestSequence || mode.value !== nextMode || spaceSlug.value !== requestSpaceSlug || authToken.value !== requestToken || (nextMode === 'shuffle' && shuffleSeed.value !== requestSeed)) return;
       const incoming = response.photos.map(toGalleryPhoto);
       const mergedPhotos = append ? [...photos.value, ...incoming.filter((photo) => !photos.value.some((existing) => existing.id === photo.id))] : incoming;
       photos.value = mergedPhotos;
-      if (nextMode !== 'location' || !selectedLocation.value) {
-        locationPhotos.value = append ? [...locationPhotos.value, ...incoming.filter((photo) => !locationPhotos.value.some((existing) => existing.id === photo.id))] : incoming;
-      }
       nextCursor.value = response.pagination.nextCursor;
       nextCursorMode.value = nextMode;
     } catch (cause) {
@@ -145,7 +195,7 @@ export const useGalleryStore = defineStore('gallery', () => {
       loading.value = false;
     }
   }
-  return { mode, selectedLocation, photos, locationPhotos, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, shuffleSeed, setMode, setLocation, setContext, openPhoto, closePhoto, previousPhoto, nextPhoto, load, loadPhoto };
+  return { mode, selectedLocation, photos, locationPhotos, locationCatalogLoading, locationCatalogReady, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, shuffleSeed, setMode, setLocation, setContext, loadLocationCatalog, openPhoto, closePhoto, previousPhoto, nextPhoto, load, loadPhoto };
 });
 
 export function toGalleryPhoto(photo: PhotoSummary): GalleryPhoto {

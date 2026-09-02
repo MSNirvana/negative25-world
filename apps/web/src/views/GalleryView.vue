@@ -31,13 +31,18 @@ const modeLabels: Record<GalleryMode, string> = { featured: 'gallery.featuredHea
 const heading = computed(() => t(modeLabels[gallery.mode]));
 const contextReady = ref(false);
 
+function markContextReady(): void {
+  contextReady.value = true;
+  void gallery.loadLocationCatalog();
+}
+
 async function syncGalleryContext(): Promise<void> {
   await session.loadUser();
   const viewingUsername = typeof route.query.user === 'string' ? route.query.user : null;
   if (viewingUsername) {
     const profile = await publicViewer.load(viewingUsername);
     gallery.setContext(profile?.workspaceSlug ?? 'primary', null);
-    contextReady.value = true;
+    markContextReady();
     return;
   }
   publicViewer.clear();
@@ -47,7 +52,7 @@ async function syncGalleryContext(): Promise<void> {
   } else {
     gallery.setContext('primary', null);
   }
-  contextReady.value = true;
+  markContextReady();
 }
 watch(() => [route.query.mode, route.query.location], ([mode, location]) => {
   const requestedMode = typeof mode === 'string' && mode in modeLabels ? mode as GalleryMode : 'featured';
@@ -78,7 +83,7 @@ watch(() => [gallery.mode, gallery.selectedLocation, contextReady.value, gallery
   expandedAlbumId.value = null;
   void gallery.load(mode as GalleryMode);
 }, { immediate: true });
-watch(() => workspace.slug, () => { if (contextReady.value && session.authenticated) { gallery.setContext(workspace.slug, session.accessToken); void gallery.load(gallery.mode); } });
+watch(() => workspace.slug, () => { if (contextReady.value && session.authenticated) { gallery.setContext(workspace.slug, session.accessToken); void gallery.loadLocationCatalog(); void gallery.load(gallery.mode); } });
 watch(() => [session.authenticated, route.query.user], () => { void syncGalleryContext(); });
 function open(photo: Parameters<typeof gallery.openPhoto>[0]): void { gallery.openPhoto(photo); void router.push({ path: `/photo/${photo.id}`, query: route.query }); }
 function loadMore(): void { if (!gallery.nextCursor || gallery.loading) return; void gallery.load(gallery.mode, true); }

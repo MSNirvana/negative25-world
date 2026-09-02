@@ -65,6 +65,14 @@ describe('discover map data', () => {
     expect(clusterLocations(locations, 2.8).every((item) => 'location' in item)).toBe(true);
   });
 
+  it('searches locations through province, raw location fields, and photo descriptions', () => {
+    const target = photo({ id: 'lijiang', location: '丽江', locationName: '丽江古城', locationRegion: '云南省', caption: '雨后的石板路' });
+    const locations = normalizeLocations([{ id: 'lijiang', name: '丽江', latitude: 26.87, longitude: 100.23, photoIds: ['lijiang'] }], [target]);
+    expect(filterLocations(locations, '云南省').map((location) => location.id)).toEqual(['lijiang']);
+    expect(filterLocations(locations, '古城').map((location) => location.id)).toEqual(['lijiang']);
+    expect(filterLocations(locations, '石板路').map((location) => location.id)).toEqual(['lijiang']);
+  });
+
   it('selects unique photos inside a fixed screen-space circle', () => {
     const first = photo({ id: 'first', location: '云南省·丽江' });
     const duplicate = photo({ id: 'first', location: '云南省·丽江' });

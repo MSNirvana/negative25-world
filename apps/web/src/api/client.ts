@@ -25,8 +25,8 @@ export async function fetchGallery(mode: string, cursor?: string, signal?: Abort
   if (location) query.set('location', location);
   if (limit !== undefined) query.set('limit', String(limit));
   if (seed !== undefined) query.set('seed', String(seed));
-  if (token) return authorized(`/spaces/${encodeURIComponent(spaceSlug)}/photos?${query}`, token, { signal }, (value) => PhotoListResponseSchema.parse(value));
-  const response = await fetch(`${apiBaseUrl}/spaces/${encodeURIComponent(spaceSlug)}/photos?${query}`, { signal, headers: { 'x-request-id': crypto.randomUUID() } });
+  if (token) return authorized(`/spaces/${encodeURIComponent(spaceSlug)}/photos?${query}`, token, { signal, cache: 'no-store' }, (value) => PhotoListResponseSchema.parse(value));
+  const response = await fetch(`${apiBaseUrl}/spaces/${encodeURIComponent(spaceSlug)}/photos?${query}`, { signal, cache: 'no-store', headers: { 'x-request-id': crypto.randomUUID() } });
   if (!response.ok) throw new Error(`Gallery request failed (${response.status})`);
   return PhotoListResponseSchema.parse(await response.json());
 }
@@ -45,7 +45,7 @@ export async function fetchDiscoverLocations(query?: string, signal?: AbortSigna
   const params = new URLSearchParams();
   if (query?.trim()) params.set('q', query.trim());
   if (spaceSlug) params.set('spaceSlug', spaceSlug);
-  const response = await fetch(`${apiBaseUrl}/discover/locations${params.size ? `?${params}` : ''}`, { signal, headers: { 'x-request-id': crypto.randomUUID() } });
+  const response = await fetch(`${apiBaseUrl}/discover/locations${params.size ? `?${params}` : ''}`, { signal, cache: 'no-store', headers: { 'x-request-id': crypto.randomUUID() } });
   if (!response.ok) throw new Error(`Locations request failed (${response.status})`);
   return DiscoverLocationsResponseSchema.parse(await response.json()).locations;
 }

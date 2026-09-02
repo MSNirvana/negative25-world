@@ -156,7 +156,10 @@ export function normalizeLocations(inputs: LocationInput[], photos: GalleryPhoto
 export function filterLocations(locations: DiscoverLocation[], query: string): DiscoverLocation[] {
   const normalized = query.trim().toLowerCase();
   if (!normalized) return locations;
-  return locations.filter((location) => `${location.name} ${location.slug} ${location.photos.map((photo) => `${photo.title} ${photo.caption}`).join(' ')}`.toLowerCase().includes(normalized));
+  return locations.filter((location) => {
+    const photoText = location.photos.map((photo) => [photo.title, photo.caption, photo.location, photo.locationName, photo.locationRegion, photo.locationId].filter(Boolean).join(' ')).join(' ');
+    return `${location.name} ${location.slug} ${photoText}`.toLowerCase().includes(normalized);
+  });
 }
 
 export type LocationCluster = { id: string; x: number; y: number; count: number; locations: DiscoverLocation[] };

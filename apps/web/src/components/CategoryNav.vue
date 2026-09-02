@@ -22,7 +22,7 @@ const items: { value: GalleryMode; key: string; icon: typeof Sparkles }[] = [
   <div class="category-bar" :class="{ 'is-inline': inline }">
     <nav class="category-nav" :aria-label="t('gallery.modes')">
       <template v-for="item in items" :key="item.value">
-        <LocationPicker v-if="item.value === 'location'" :active="active === 'location'" :photos="props.photos ?? []" :selected-location="props.selectedLocation ?? null" @select-mode="emit('select', 'location')" @select-location="emit('select-location', $event)" />
+        <LocationPicker v-if="item.value === 'location'" :active="active === 'location'" :photos="props.photos ?? []" :selected-location="props.selectedLocation ?? null" @select-location="emit('select-location', $event)" />
         <button v-else type="button" :class="{ active: active === item.value }" @click="emit('select', item.value)">
           <component :is="item.icon" :size="14" /> {{ t(item.key) }}
         </button>
