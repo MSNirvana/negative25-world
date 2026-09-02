@@ -81,8 +81,8 @@ test('albums mode renders public stacks and collapses on blank space', async ({ 
     location: null,
     metadata: {},
   });
-  const cover = photo('22222222-2222-4222-8222-222222222222', 'Dawn cover');
-  const second = photo('33333333-3333-4333-8333-333333333333', 'Dawn second', 0.8);
+  const cover = { ...photo('22222222-2222-4222-8222-222222222222', 'Dawn cover'), rating: 7 };
+  const second = { ...photo('33333333-3333-4333-8333-333333333333', 'Dawn second', 0.8), rating: 5 };
   await page.route('**/api/v1/spaces/primary/albums', async (route) => {
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ albums: [{ id: albumId, spaceSlug: 'primary', title: 'Dawn trip', shootDate: '2026-01-02', cover, photoCount: 2 }] }) });
   });
@@ -104,8 +104,10 @@ test('albums mode renders public stacks and collapses on blank space', async ({ 
   await page.getByRole('button', { name: 'Expand album Dawn trip' }).click();
   await expect(page.locator('.album-expanded')).toBeVisible();
   await expect(page.locator('.album-photo')).toHaveCount(2);
+  await expect(page.locator('.album-photo').nth(0)).toHaveAccessibleName('Open Dawn cover');
+  await expect(page.locator('.album-photo').nth(1)).toHaveAccessibleName('Open Dawn second');
   const [spreadBox, contentBox] = await Promise.all([page.locator('.album-spread').boundingBox(), page.locator('.gallery-content').boundingBox()]);
-  expect((spreadBox?.width ?? Number.POSITIVE_INFINITY) / (contentBox?.width ?? 1)).toBeLessThanOrEqual(0.51);
+  expect((spreadBox?.width ?? 0) / (contentBox?.width ?? 1)).toBeGreaterThanOrEqual(0.9);
   await expect(page.getByRole('button', { name: 'Expand album Dawn trip' })).toHaveCount(0);
   await page.locator('.album-expanded').click({ position: { x: 8, y: 8 } });
   await expect(page.getByRole('button', { name: 'Expand album Dawn trip' })).toBeVisible();
