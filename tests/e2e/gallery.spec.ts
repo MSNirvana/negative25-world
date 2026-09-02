@@ -141,7 +141,7 @@ test('masonry gallery fills desktop columns with varied photo proportions', asyn
   expect(firstCellBox).not.toBeNull();
   expect(lastColumnBox).not.toBeNull();
   expect((lastColumnBox?.x ?? 0) + (lastColumnBox?.width ?? 0)).toBeCloseTo((gridBox?.x ?? 0) + (gridBox?.width ?? 0), 0);
-  expect((firstCellBox?.width ?? 0) / (firstColumnBox?.width ?? 1)).toBeCloseTo(0.7, 1);
+  expect((firstCellBox?.width ?? 0) / (firstColumnBox?.width ?? 1)).toBeCloseTo(1, 1);
 });
 
 test('albums mode renders public stacks and collapses on blank space', async ({ page }) => {
@@ -225,7 +225,7 @@ test('location mode opens a searchable picker and filters the gallery', async ({
   const [singleCellBox, singleGridBox] = await Promise.all([singlePhotoCell.boundingBox(), page.locator('.photo-grid').boundingBox()]);
   expect(singleCellBox).not.toBeNull();
   expect(singleGridBox).not.toBeNull();
-  expect((singleCellBox?.width ?? 0) / (singleGridBox?.width ?? 1)).toBeCloseTo(0.7, 1);
+  expect((singleCellBox?.width ?? 0) / (singleGridBox?.width ?? 1)).toBeCloseTo(1, 1);
   await page.getByRole('button', { name: 'Region' }).click();
   const beijingPicker = page.getByRole('dialog', { name: 'Choose a location' });
   await beijingPicker.getByRole('option', { name: 'Beijing' }).click();
