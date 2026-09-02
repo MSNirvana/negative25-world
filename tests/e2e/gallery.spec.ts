@@ -133,10 +133,15 @@ test('masonry gallery fills desktop columns with varied photo proportions', asyn
   await expect(columns).toHaveCount(3);
   for (let index = 0; index < 3; index += 1) await expect(columns.nth(index).locator('.photo-cell')).not.toHaveCount(0);
   const gridBox = await page.locator('.photo-grid').boundingBox();
+  const firstColumnBox = await columns.first().boundingBox();
+  const firstCellBox = await columns.first().locator('.photo-cell').first().boundingBox();
   const lastColumnBox = await columns.last().boundingBox();
   expect(gridBox).not.toBeNull();
+  expect(firstColumnBox).not.toBeNull();
+  expect(firstCellBox).not.toBeNull();
   expect(lastColumnBox).not.toBeNull();
   expect((lastColumnBox?.x ?? 0) + (lastColumnBox?.width ?? 0)).toBeCloseTo((gridBox?.x ?? 0) + (gridBox?.width ?? 0), 0);
+  expect((firstCellBox?.width ?? 0) / (firstColumnBox?.width ?? 1)).toBeCloseTo(0.7, 1);
 });
 
 test('albums mode renders public stacks and collapses on blank space', async ({ page }) => {
@@ -220,7 +225,7 @@ test('location mode opens a searchable picker and filters the gallery', async ({
   const [singleCellBox, singleGridBox] = await Promise.all([singlePhotoCell.boundingBox(), page.locator('.photo-grid').boundingBox()]);
   expect(singleCellBox).not.toBeNull();
   expect(singleGridBox).not.toBeNull();
-  expect(singleCellBox?.width).toBeGreaterThan((singleGridBox?.width ?? 0) * 0.9);
+  expect((singleCellBox?.width ?? 0) / (singleGridBox?.width ?? 1)).toBeCloseTo(0.7, 1);
   await page.getByRole('button', { name: 'Region' }).click();
   const beijingPicker = page.getByRole('dialog', { name: 'Choose a location' });
   await beijingPicker.getByRole('option', { name: 'Beijing' }).click();

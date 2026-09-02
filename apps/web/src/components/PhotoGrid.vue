@@ -65,5 +65,6 @@ onBeforeUnmount(() => {
 <style scoped>
 .photo-grid { align-items: start; display: grid; gap: var(--grid-gap); grid-template-columns: repeat(var(--column-count), minmax(0, 1fr)); width: 100%; }
 .photo-column { display: grid; gap: var(--grid-gap); min-width: 0; }
-.photo-cell { min-width: 0; width: 100%; }
+.photo-cell { margin-inline: auto; min-width: 0; width: 70%; }
+@media (max-width: 580px) { .photo-cell { width: 100%; } }
 </style>
