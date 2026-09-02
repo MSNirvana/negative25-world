@@ -16,7 +16,7 @@
 - Create: `apps/web/src/lib/album-photo-filter.ts`
 - Create: `apps/web/src/lib/album-photo-filter.test.ts`
 
-- [ ] **Step 1: Write the failing tests**
+- [x] **Step 1: Write the failing tests**
 
 Create a minimal photo fixture with `metadata.displayAddress` and cover matching, case-insensitivity, trimming, empty-query reset, and missing-address behavior:
 
@@ -46,13 +46,13 @@ describe('filterAlbumPhotosByDisplayAddress', () => {
 });
 ```
 
-- [ ] **Step 2: Run the focused test to verify it fails**
+- [x] **Step 2: Run the focused test to verify it fails**
 
 Run: `pnpm --filter @negative25/web test -- src/lib/album-photo-filter.test.ts --run`
 
 Expected: FAIL because `album-photo-filter.ts` and `filterAlbumPhotosByDisplayAddress` do not exist yet.
 
-- [ ] **Step 3: Implement the minimal pure helper**
+- [x] **Step 3: Implement the minimal pure helper**
 
 Create the helper with a generic photo shape so it can accept `AdminPhoto` without importing the API client into the utility:
 
@@ -69,7 +69,7 @@ export function filterAlbumPhotosByDisplayAddress<T extends DisplayAddressPhoto>
 }
 ```
 
-- [ ] **Step 4: Run the focused test to verify it passes**
+- [x] **Step 4: Run the focused test to verify it passes**
 
 Run: `pnpm --filter @negative25/web test -- src/lib/album-photo-filter.test.ts --run`
 
@@ -82,7 +82,7 @@ Expected: PASS with 3 tests.
 - Modify: `apps/web/src/views/admin/AdminAlbumsView.vue:84-86`
 - Modify: `apps/web/src/i18n.ts:381-385,495-502`
 
-- [ ] **Step 1: Add filter state and computed results**
+- [x] **Step 1: Add filter state and computed results**
 
 Import the helper, add `displayAddressFilter`, reset it when opening create/edit, and compute `filteredPhotos` from the complete `photos` list:
 
@@ -94,7 +94,7 @@ function startCreate(): void { displayAddressFilter.value = ''; draft.value = em
 function startEdit(album: AdminAlbum): void { displayAddressFilter.value = ''; draft.value = { id: album.id, title: album.title, description: album.description ?? '', shootDate: album.shootDate ?? '', coverPhotoId: album.coverPhotoId ?? '', photoIds: [...album.photoIds] }; }
 ```
 
-- [ ] **Step 2: Add the filter control and use filtered results**
+- [x] **Step 2: Add the filter control and use filtered results**
 
 Place the input below the photo picker heading and preserve the existing `photos` list for the cover selector. Replace only the photo picker loop source:
 
@@ -108,7 +108,7 @@ Place the input below the photo picker heading and preserve the existing `photos
 
 Keep `togglePhoto`, `draft.photoIds`, and the cover `<select>` tied to the complete loaded photo set so filtering cannot deselect or invalidate existing choices.
 
-- [ ] **Step 3: Add localized labels**
+- [x] **Step 3: Add localized labels**
 
 Add these keys to both locale records near the existing admin filters:
 
@@ -122,7 +122,7 @@ Add these keys to both locale records near the existing admin filters:
 'admin.filterDisplayAddressPlaceholder': 'Enter a display address',
 ```
 
-- [ ] **Step 4: Add compact responsive styling**
+- [x] **Step 4: Add compact responsive styling**
 
 Reuse the existing editor form appearance without changing picker dimensions:
 
@@ -132,7 +132,7 @@ Reuse the existing editor form appearance without changing picker dimensions:
 .photo-filter input:focus { border-color: var(--accent-deep); outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
 ```
 
-- [ ] **Step 5: Run the frontend verification suite**
+- [x] **Step 5: Run the frontend verification suite**
 
 Run: `pnpm --filter @negative25/web typecheck`
 
@@ -158,11 +158,11 @@ Expected: no whitespace errors.
 - Review: `apps/web/src/views/admin/AdminAlbumsView.vue`
 - Review: `apps/web/src/i18n.ts`
 
-- [ ] **Step 1: Confirm scope and behavior**
+- [x] **Step 1: Confirm scope and behavior**
 
 Verify that the diff changes only the album editor filter, reads only `metadata.displayAddress`, leaves selected IDs intact while filtering, and does not alter API payloads or public album behavior.
 
-- [ ] **Step 2: Commit the implementation**
+- [x] **Step 2: Commit the implementation**
 
 ```bash
 git add apps/web/src/lib/album-photo-filter.ts apps/web/src/lib/album-photo-filter.test.ts apps/web/src/views/admin/AdminAlbumsView.vue apps/web/src/i18n.ts
