@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { buildJustifiedRows } from './justified-rows';
+import { appendJustifiedRows, buildJustifiedRows } from './justified-rows';
 import { sortAlbumPhotos } from './album-layout';
 
 type TestPhoto = { id: string; rating: number | null; capturedAt: string; aspectRatio: number };
@@ -30,5 +30,16 @@ describe('album layout', () => {
       const ratioSum = row.photos.reduce((sum, photo) => sum + photo.aspectRatio, 0);
       expect(row.height * ratioSum + 13 * (row.photos.length - 1)).toBeCloseTo(1200, 5);
     }
+  });
+
+  it('keeps existing rows unchanged when photos are appended', () => {
+    const firstPage = Array.from({ length: 12 }, (_, index) => ({ id: String(index), aspectRatio: 1 }));
+    const secondPage = [...firstPage, { id: '12', aspectRatio: 1.4 }, { id: '13', aspectRatio: 0.8 }];
+    const initialRows = buildJustifiedRows(firstPage, 1200, 13);
+    const appendedRows = appendJustifiedRows(initialRows, firstPage, secondPage, 1200, 13);
+
+    expect(appendedRows.slice(0, initialRows.length)).toEqual(initialRows);
+    expect(appendedRows[0]).toBe(initialRows[0]);
+    expect(appendedRows.flatMap((row) => row.photos).map((photo) => photo.id)).toEqual(secondPage.map((photo) => photo.id));
   });
 });

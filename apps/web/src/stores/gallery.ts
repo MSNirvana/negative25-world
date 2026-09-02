@@ -50,32 +50,42 @@ export const useGalleryStore = defineStore('gallery', () => {
   const loading = ref(false);
   const error = ref<string | null>(null);
   const nextCursor = ref<string | null>(null);
+  const nextCursorMode = ref<GalleryMode | null>(null);
   const activePhoto = ref<GalleryPhoto | null>(null);
   const spaceSlug = ref('primary');
   const authToken = ref<string | null>(null);
   const shuffleSeed = ref(nextShuffleSeed());
   let activeRequest: AbortController | null = null;
+  let requestSequence = 0;
   const visiblePhotos = computed(() => {
     let result = [...photos.value];
-    if (mode.value === 'featured') result.sort(compareFeaturedPhotos);
-    if (mode.value === 'recent') result.reverse();
-    if (mode.value === 'shuffle') result.sort((left, right) => shuffleRank(left.id, shuffleSeed.value) - shuffleRank(right.id, shuffleSeed.value) || left.id.localeCompare(right.id));
+    if (!isApiConfigured()) {
+      result = sortGalleryPhotosForMode(result, mode.value, shuffleSeed.value);
+    }
     if (mode.value === 'location' && selectedLocation.value) result = filterPhotosByLocation(result, selectedLocation.value);
     return result;
   });
   function setMode(next: GalleryMode): void {
+    const modeChanged = mode.value !== next;
+    const refreshShuffle = next === 'shuffle' && !modeChanged;
     mode.value = next;
-    if (next === 'shuffle') shuffleSeed.value = nextShuffleSeed();
+    if (next === 'shuffle' && (modeChanged || refreshShuffle)) shuffleSeed.value = nextShuffleSeed();
+    if (modeChanged || refreshShuffle) {
+      nextCursor.value = null;
+      nextCursorMode.value = null;
+    }
   }
   function setLocation(next: string | null): void { selectedLocation.value = next; }
   function setContext(nextSpaceSlug: string, token: string | null): void {
     if (spaceSlug.value === nextSpaceSlug && authToken.value === token) return;
     activeRequest?.abort();
+    requestSequence += 1;
     spaceSlug.value = nextSpaceSlug;
     authToken.value = token;
     photos.value = isApiConfigured() ? [] : demoPhotos;
     locationPhotos.value = isApiConfigured() ? [] : demoPhotos;
     nextCursor.value = null;
+    nextCursorMode.value = null;
     activePhoto.value = null;
   }
   function openPhoto(photo: GalleryPhoto): void { activePhoto.value = photo; }
@@ -86,6 +96,11 @@ export const useGalleryStore = defineStore('gallery', () => {
     if (!isApiConfigured()) return;
     activeRequest?.abort();
     const controller = new AbortController();
+    const requestId = ++requestSequence;
+    const requestSpaceSlug = spaceSlug.value;
+    const requestToken = authToken.value;
+    const requestSeed = nextMode === 'shuffle' ? shuffleSeed.value : undefined;
+    const requestCursor = append && nextMode === mode.value && nextCursorMode.value === nextMode ? nextCursor.value ?? undefined : undefined;
     activeRequest = controller;
     loading.value = true;
     error.value = null;
@@ -95,8 +110,8 @@ export const useGalleryStore = defineStore('gallery', () => {
         if (controller.signal.aborted) return;
         locationPhotos.value = catalog.photos.map(toGalleryPhoto);
       }
-      const response = await fetchGallery(nextMode, append && nextMode === mode.value ? nextCursor.value ?? undefined : undefined, controller.signal, nextMode === 'location' ? selectedLocation.value ?? undefined : undefined, spaceSlug.value, authToken.value);
-      if (controller.signal.aborted) return;
+      const response = await fetchGallery(nextMode, requestCursor, controller.signal, nextMode === 'location' ? selectedLocation.value ?? undefined : undefined, requestSpaceSlug, requestToken, undefined, requestSeed);
+      if (controller.signal.aborted || requestId !== requestSequence || mode.value !== nextMode || spaceSlug.value !== requestSpaceSlug || authToken.value !== requestToken || (nextMode === 'shuffle' && shuffleSeed.value !== requestSeed)) return;
       const incoming = response.photos.map(toGalleryPhoto);
       const mergedPhotos = append ? [...photos.value, ...incoming.filter((photo) => !photos.value.some((existing) => existing.id === photo.id))] : incoming;
       photos.value = mergedPhotos;
@@ -104,6 +119,7 @@ export const useGalleryStore = defineStore('gallery', () => {
         locationPhotos.value = append ? [...locationPhotos.value, ...incoming.filter((photo) => !locationPhotos.value.some((existing) => existing.id === photo.id))] : incoming;
       }
       nextCursor.value = response.pagination.nextCursor;
+      nextCursorMode.value = nextMode;
     } catch (cause) {
       if (controller.signal.aborted) return;
       error.value = cause instanceof Error ? cause.message : t('gallery.loadError');
@@ -129,7 +145,7 @@ export const useGalleryStore = defineStore('gallery', () => {
       loading.value = false;
     }
   }
-  return { mode, selectedLocation, photos, locationPhotos, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, setMode, setLocation, setContext, openPhoto, closePhoto, previousPhoto, nextPhoto, load, loadPhoto };
+  return { mode, selectedLocation, photos, locationPhotos, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, shuffleSeed, setMode, setLocation, setContext, openPhoto, closePhoto, previousPhoto, nextPhoto, load, loadPhoto };
 });
 
 export function toGalleryPhoto(photo: PhotoSummary): GalleryPhoto {
@@ -166,6 +182,18 @@ export function toGalleryPhoto(photo: PhotoSummary): GalleryPhoto {
     coordinates,
     altitude: numberFrom(metadata.altitude),
   };
+}
+
+export function sortGalleryPhotosForMode<T extends Pick<GalleryPhoto, 'id' | 'title' | 'rating' | 'aspectRatio' | 'capturedAt'>>(
+  photos: readonly T[],
+  mode: GalleryMode,
+  shuffleSeed = 0,
+): T[] {
+  const result = [...photos];
+  if (mode === 'featured') return result.sort(compareFeaturedPhotos);
+  if (mode === 'recent') return result.sort(compareRecentPhotos);
+  if (mode === 'shuffle') return result.sort((left, right) => shuffleRank(left.id, shuffleSeed) - shuffleRank(right.id, shuffleSeed) || left.id.localeCompare(right.id));
+  return result;
 }
 
 function stringValue(value: unknown): string {
@@ -251,13 +279,23 @@ function toneFor(id: string): string {
   return `hsl(${hue} 16% 78%)`;
 }
 
-function compareFeaturedPhotos(left: GalleryPhoto, right: GalleryPhoto): number {
+type SortableGalleryPhoto = Pick<GalleryPhoto, 'id' | 'title' | 'rating' | 'aspectRatio' | 'capturedAt'>;
+
+function compareFeaturedPhotos(left: SortableGalleryPhoto, right: SortableGalleryPhoto): number {
   const ratingDifference = (right.rating ?? -1) - (left.rating ?? -1);
   if (ratingDifference) return ratingDifference;
   // Keep matching frame shapes together so justified rows look calmer within a rating.
   const ratioDifference = right.aspectRatio - left.aspectRatio;
   if (ratioDifference) return ratioDifference;
   return left.title.localeCompare(right.title);
+}
+
+function compareRecentPhotos(left: SortableGalleryPhoto, right: SortableGalleryPhoto): number {
+  const leftTime = Date.parse(left.capturedAt);
+  const rightTime = Date.parse(right.capturedAt);
+  if (Number.isFinite(leftTime) && Number.isFinite(rightTime) && leftTime !== rightTime) return rightTime - leftTime;
+  if (Number.isFinite(leftTime) !== Number.isFinite(rightTime)) return Number.isFinite(rightTime) ? 1 : -1;
+  return right.capturedAt.localeCompare(left.capturedAt) || left.id.localeCompare(right.id);
 }
 
 function nextShuffleSeed(): number { return Math.floor(Math.random() * 0xFFFFFFFF); }

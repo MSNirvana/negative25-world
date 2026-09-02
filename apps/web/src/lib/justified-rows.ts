@@ -1,4 +1,5 @@
 export type RatioPhoto = { aspectRatio: number };
+export type IdentifiedRatioPhoto = RatioPhoto & { id: string };
 
 export type JustifiedRow<T> = {
   photos: T[];
@@ -65,6 +66,25 @@ export function buildJustifiedRows<T extends RatioPhoto>(photos: readonly T[], w
     const isLast = index === nextRows.length - 1;
     return { photos: items, height: isLast ? Math.min(targetHeight, fullWidthHeight) : fullWidthHeight, isLast, startIndex };
   });
+}
+
+export function appendJustifiedRows<T extends IdentifiedRatioPhoto>(
+  existingRows: readonly JustifiedRow<T>[],
+  previousPhotos: readonly T[],
+  photos: readonly T[],
+  width: number,
+  gap = 12,
+): JustifiedRow<T>[] {
+  const canAppend = previousPhotos.length > 0
+    && photos.length > previousPhotos.length
+    && previousPhotos.every((photo, index) => photos[index] === photo);
+  if (!canAppend || !existingRows.length) return buildJustifiedRows(photos, width, gap);
+
+  const incomingRows = buildJustifiedRows(photos.slice(previousPhotos.length), width, gap);
+  return [
+    ...existingRows,
+    ...incomingRows.map((row) => ({ ...row, startIndex: row.startIndex + previousPhotos.length })),
+  ];
 }
 
 export function justifiedCellStyle<T extends RatioPhoto>(row: JustifiedRow<T>, photo: T): Record<string, string> {

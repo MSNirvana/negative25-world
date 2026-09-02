@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
-import { toGalleryPhoto, useGalleryStore } from './gallery.js';
+import { sortGalleryPhotosForMode, toGalleryPhoto, useGalleryStore } from './gallery.js';
 import { setLocale } from '../i18n';
 
 describe('gallery store', () => {
@@ -29,19 +29,20 @@ describe('gallery store', () => {
       { ...base, id: 'standard', title: 'Standard', rating: 7, aspectRatio: 1.4 },
       { ...base, id: 'lower-rating', title: 'Lower rating', rating: 6, aspectRatio: 2 },
     );
-    gallery.setMode('featured');
-    expect(gallery.visiblePhotos.map((photo) => photo.id)).toEqual(['wide', 'standard', 'portrait', 'lower-rating']);
+    expect(sortGalleryPhotosForMode(gallery.photos, 'featured').map((photo) => photo.id)).toEqual(['wide', 'standard', 'portrait', 'lower-rating']);
   });
 
   it('reshuffles when random browse is selected again', () => {
     const gallery = useGalleryStore();
     const random = vi.spyOn(Math, 'random').mockReturnValueOnce(0.01).mockReturnValueOnce(0.99);
     gallery.setMode('shuffle');
-    const firstOrder = gallery.visiblePhotos.map((photo) => photo.id);
+    const firstSeed = gallery.shuffleSeed;
     gallery.setMode('shuffle');
-    const secondOrder = gallery.visiblePhotos.map((photo) => photo.id);
+    const secondSeed = gallery.shuffleSeed;
     random.mockRestore();
-    expect(secondOrder).not.toEqual(firstOrder);
+    expect(secondSeed).not.toBe(firstSeed);
+    expect(sortGalleryPhotosForMode(gallery.photos, 'shuffle', firstSeed).map((photo) => photo.id))
+      .not.toEqual(sortGalleryPhotosForMode(gallery.photos, 'shuffle', secondSeed).map((photo) => photo.id));
   });
 
   it('maps camera settings, GPS, altitude, and seven-star rating from the API payload', () => {

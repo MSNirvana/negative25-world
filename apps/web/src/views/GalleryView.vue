@@ -52,7 +52,7 @@ async function syncGalleryContext(): Promise<void> {
 watch(() => [route.query.mode, route.query.location], ([mode, location]) => {
   const requestedMode = typeof mode === 'string' && mode in modeLabels ? mode as GalleryMode : 'featured';
   const nextMode = requestedMode === 'nearby' ? 'location' : requestedMode;
-  gallery.setMode(nextMode);
+  if (gallery.mode !== nextMode) gallery.setMode(nextMode);
   gallery.setLocation(nextMode === 'location' && typeof location === 'string' ? location : null);
 }, { immediate: true });
 async function loadAlbums(): Promise<void> {
@@ -72,7 +72,7 @@ async function loadAlbums(): Promise<void> {
     }
   } finally { if (requestId === albumRequestId) albumsLoading.value = false; }
 }
-watch(() => [gallery.mode, gallery.selectedLocation, contextReady.value, gallery.spaceSlug] as const, ([mode, , ready]) => {
+watch(() => [gallery.mode, gallery.selectedLocation, contextReady.value, gallery.spaceSlug, gallery.shuffleSeed] as const, ([mode, , ready]) => {
   if (!ready) return;
   if (mode === 'faraway') { void loadAlbums(); return; }
   expandedAlbumId.value = null;

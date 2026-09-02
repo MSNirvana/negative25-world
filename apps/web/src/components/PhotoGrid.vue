@@ -1,9 +1,9 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import PhotoCard from './PhotoCard.vue';
 import type { GalleryPhoto } from '../stores/gallery';
 import { useLocale } from '../i18n';
-import { buildJustifiedRows, justifiedCellStyle, type JustifiedRow } from '../lib/justified-rows';
+import { appendJustifiedRows, buildJustifiedRows, justifiedCellStyle, type JustifiedRow } from '../lib/justified-rows';
 
 const props = defineProps<{ photos: GalleryPhoto[] }>();
 const emit = defineEmits<{ (event: 'open', photo: GalleryPhoto): void }>();
@@ -11,19 +11,33 @@ const { t } = useLocale();
 const root = ref<HTMLElement | null>(null);
 const width = ref(0);
 const gap = 12;
-const rows = computed<JustifiedRow<GalleryPhoto>[]>(() => buildJustifiedRows(props.photos, width.value, gap));
+const rows = ref<JustifiedRow<GalleryPhoto>[]>([]);
+let previousPhotos: GalleryPhoto[] = [];
+let previousWidth = 0;
+
+function updateRows(): void {
+  rows.value = previousWidth === width.value
+    ? appendJustifiedRows(rows.value, previousPhotos, props.photos, width.value, gap)
+    : buildJustifiedRows(props.photos, width.value, gap);
+  previousPhotos = [...props.photos];
+  previousWidth = width.value;
+}
+
+function scheduleRows(): void { void nextTick(updateRows); }
 
 function updateWidth(): void { width.value = root.value?.clientWidth ?? 0; }
 
 let resizeObserver: ResizeObserver | null = null;
 onMounted(() => {
   updateWidth();
+  scheduleRows();
   if (root.value && typeof ResizeObserver !== 'undefined') {
     resizeObserver = new ResizeObserver(updateWidth);
     resizeObserver.observe(root.value);
   }
 });
-watch(() => props.photos.length, () => void nextTick(updateWidth));
+watch(() => props.photos.map((photo) => photo.id), scheduleRows, { flush: 'post' });
+watch(width, scheduleRows, { flush: 'post' });
 onBeforeUnmount(() => resizeObserver?.disconnect());
 </script>
 

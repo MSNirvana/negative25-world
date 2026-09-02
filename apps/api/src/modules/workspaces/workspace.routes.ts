@@ -20,7 +20,7 @@ export function registerWorkspaceRoutes(app: FastifyInstance, workspaces: Worksp
     const token = request.headers.authorization;
     if (slug !== 'primary' && !token) await workspaces.getPublicBySlug(slug);
     else if (slug !== 'primary' && token) await workspaces.requireWorkspaceRole(slug, (await auth.authenticate(getBearer(token))).id);
-    const query = request.query as { mode?: string; cursor?: string; limit?: string; location?: string };
+    const query = request.query as { mode?: string; cursor?: string; limit?: string; location?: string; seed?: string };
     const modes = ['featured', 'recent', 'shuffle', 'location', 'nearby', 'faraway'];
     if (query.mode && !modes.includes(query.mode)) throw new ApiError('VALIDATION_ERROR', 'Unsupported gallery mode');
     const workspace = await workspaces.getBySlug(slug);
@@ -30,8 +30,9 @@ export function registerWorkspaceRoutes(app: FastifyInstance, workspaces: Worksp
     const limit = Math.min(100, requestedLimit);
     const start = query.cursor ? Number(query.cursor) : 0;
     if (!Number.isInteger(start) || start < 0 || (query.cursor && !/^\d+$/.test(query.cursor))) throw new ApiError('VALIDATION_ERROR', 'Invalid cursor');
+    const shuffleSeed = query.seed === undefined ? undefined : parseShuffleSeed(query.seed);
     const filteredPhotos = query.location?.trim() ? filterPhotosByLocation(photos, query.location.trim()) : photos;
-    const items = sortPhotos(filteredPhotos, query.mode).slice(start, start + limit);
+    const items = sortPhotos(filteredPhotos, query.mode, shuffleSeed).slice(start, start + limit);
     return { photos: items, pagination: { nextCursor: start + limit < filteredPhotos.length ? String(start + limit) : null, hasMore: start + limit < filteredPhotos.length } };
   });
   app.get('/api/v1/photos/:id', async (request) => {
@@ -52,18 +53,42 @@ export function registerWorkspaceRoutes(app: FastifyInstance, workspaces: Worksp
   });
 }
 
-function sortPhotos<T extends { id: string; rating: number | null; capturedAt?: string }>(photos: T[], mode?: string): T[] {
+export function sortPhotos<T extends { id: string; rating: number | null; capturedAt?: string; aspectRatio?: number; title?: string }>(photos: T[], mode?: string, shuffleSeed?: number): T[] {
   const sorted = [...photos];
-  if (mode === 'recent') return sorted.sort((a, b) => String(b.capturedAt ?? '').localeCompare(String(a.capturedAt ?? '')));
-  if (mode === 'featured') return sorted.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || a.id.localeCompare(b.id));
-  if (mode === 'shuffle') return sorted.sort((a, b) => stableHash(a.id) - stableHash(b.id));
+  if (mode === 'recent') return sorted.sort((a, b) => compareCapturedAtDescending(a, b) || a.id.localeCompare(b.id));
+  if (mode === 'featured') return sorted.sort((a, b) => (b.rating ?? -1) - (a.rating ?? -1) || (b.aspectRatio ?? 1) - (a.aspectRatio ?? 1) || String(a.title ?? '').localeCompare(String(b.title ?? '')) || a.id.localeCompare(b.id));
+  if (mode === 'shuffle') return sorted.sort((a, b) => shuffleRank(a.id, shuffleSeed) - shuffleRank(b.id, shuffleSeed) || a.id.localeCompare(b.id));
   return sorted;
+}
+
+function compareCapturedAtDescending<T extends { capturedAt?: string }>(left: T, right: T): number {
+  const leftTime = Date.parse(String(left.capturedAt ?? ''));
+  const rightTime = Date.parse(String(right.capturedAt ?? ''));
+  const leftValid = Number.isFinite(leftTime);
+  const rightValid = Number.isFinite(rightTime);
+  if (leftValid && rightValid && leftTime !== rightTime) return rightTime - leftTime;
+  if (leftValid !== rightValid) return rightValid ? 1 : -1;
+  return String(right.capturedAt ?? '').localeCompare(String(left.capturedAt ?? ''));
+}
+
+function shuffleRank(value: string, seed?: number): number {
+  if (seed === undefined) return stableHash(value);
+  let hash = seed ^ 0x811C9DC5;
+  for (const character of value) hash = Math.imul(hash ^ character.charCodeAt(0), 0x01000193);
+  return hash >>> 0;
 }
 
 function stableHash(value: string): number {
   let hash = 2166136261;
   for (const character of value) hash = Math.imul(hash ^ character.charCodeAt(0), 16777619);
   return hash >>> 0;
+}
+
+function parseShuffleSeed(value: string): number {
+  if (!/^\d+$/.test(value)) throw new ApiError('VALIDATION_ERROR', 'Invalid shuffle seed');
+  const seed = Number(value);
+  if (!Number.isSafeInteger(seed) || seed < 0 || seed > 0xFFFFFFFF) throw new ApiError('VALIDATION_ERROR', 'Invalid shuffle seed');
+  return seed;
 }
 
 export function filterPhotosByLocation<T extends { location?: { id: string; name: string } | null; metadata?: Record<string, unknown> }>(photos: T[], query: string): T[] {
