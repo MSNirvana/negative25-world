@@ -86,6 +86,27 @@ describe('AdminService photo management', () => {
     expect(result.photos[0]).toMatchObject({ location: { name: '北京故宫' }, latitude: 39.9, longitude: 116.4, metadata: { displayAddress: '午门', displayRegion: '北京市', displayRegionEnabled: true, altitude: 50, custom: 'keep' } });
   });
 
+  it('copies each publication status and keeps the source unchanged', async () => {
+    const scenarios = [
+      { name: 'published', source: { published: true, hidden: false, ownerOnly: false }, expected: { published: true, hidden: false, ownerOnly: false } },
+      { name: 'owner-only', source: { published: true, hidden: false, ownerOnly: true }, expected: { published: true, hidden: false, ownerOnly: true } },
+      { name: 'hidden', source: { published: false, hidden: true, ownerOnly: false }, expected: { published: false, hidden: true, ownerOnly: false } },
+    ] as const;
+
+    for (const scenario of scenarios) {
+      const repository = new MemoryRepository();
+      await repository.savePhoto({ id: 'source-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Source', description: '', rating: null, metadata: scenario.source.ownerOnly ? { ownerOnly: true } : {}, ...scenario.source });
+      await repository.savePhoto({ id: 'target-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Target', description: '', rating: null, published: true, hidden: false, ownerOnly: true, metadata: { ownerOnly: true, custom: 'keep' } });
+      const service = new AdminService(repository);
+
+      const result = await service.copyPhotoFields(actor, 'source-photo', ['target-photo'], ['status']);
+
+      expect(result.photos[0]).toMatchObject({ id: 'target-photo', ...scenario.expected, metadata: { custom: 'keep', ...(scenario.expected.ownerOnly ? { ownerOnly: true } : {}) } });
+      if (!scenario.expected.ownerOnly) expect(result.photos[0].metadata).not.toHaveProperty('ownerOnly');
+      await expect(repository.findPhoto(PRIMARY_WORKSPACE_ID, 'source-photo')).resolves.toMatchObject(scenario.source);
+    }
+  });
+
   it('deletes a photo, removes album references, and cleans its storage variants', async () => {
     const repository = new MemoryRepository();
     await repository.savePhoto({ id: 'delete-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Delete me', description: '', published: true, hidden: false, rating: null, metadata: { storageKeys: ['photos/delete/original.jpg', 'photos/delete/thumbnail.jpg'] } });

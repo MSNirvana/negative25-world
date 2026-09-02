@@ -17,6 +17,15 @@ test.beforeEach(async ({ page }) => {
   await page.route('**/api/v1/auth/me', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user-1', username: 'owner', email: 'owner@n25.world', name: 'Owner', emailVerifiedAt: null }) }));
   await page.route('**/api/v1/workspaces', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'workspace-1', slug: 'primary', name: 'negative25', role: 'owner' }]) }));
   await page.route('**/api/v1/admin/spaces/primary/photos', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(photos) }));
+  await page.route('**/api/v1/admin/spaces/primary/summary', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ workspace: { id: 'workspace-1', slug: 'primary', name: 'negative25', role: 'owner' }, stats: { photoCount: 3, publishedPhotoCount: 3, pendingImportCount: 0 }, recentActivity: [] }) }));
+  await page.route('**/api/v1/spaces/primary/imports', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([]) }));
+});
+
+test('overview import action opens the import module', async ({ page }) => {
+  await page.goto('/account');
+  await page.getByRole('link', { name: 'Import photos' }).click();
+  await expect(page).toHaveURL(/\/account\/imports$/);
+  await expect(page.getByRole('heading', { name: 'Bring in new work.' })).toBeVisible();
 });
 
 test('selects photos, copies source metadata, and previews thumbnails', async ({ page }) => {
@@ -37,6 +46,30 @@ test('selects photos, copies source metadata, and previews thumbnails', async ({
   await expect(page.getByRole('dialog', { name: 'Preview photo' })).toBeVisible();
   await page.locator('.photo-preview-overlay').click({ position: { x: 8, y: 8 } });
   await expect(page.getByRole('dialog', { name: 'Preview photo' })).toHaveCount(0);
+});
+
+test('copies source status and updates the target row', async ({ page }) => {
+  let copyRequest: unknown;
+  await page.route('**/api/v1/admin/spaces/primary/photos/bulk-copy', async (route) => {
+    copyRequest = route.request().postDataJSON();
+    const target = {
+      id: 'target', workspaceId: 'workspace-1', title: 'Target frame', description: '', published: true, hidden: false, ownerOnly: true, rating: 3,
+      thumbnail: { kind: 'thumbnail', url: 'https://example.com/target-thumb.jpg', width: 300, height: 200, format: 'jpeg' },
+      media: [{ kind: 'large', url: 'https://example.com/target-large.jpg', width: 1200, height: 800, format: 'jpeg' }],
+      location: { id: 'target-location', name: 'Beijing' }, latitude: 39.9, longitude: 116.4,
+      metadata: { ownerOnly: true, displayAddress: 'Forbidden City', displayRegion: 'Beijing', displayRegionEnabled: true, latitude: 39.9, longitude: 116.4 },
+      importBatch: { id: 'batch-new', createdAt: '2026-09-02T10:00:00.000Z' },
+    };
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: [target], skippedIds: [] }) });
+  });
+  await page.goto('/account/photos');
+  const rows = page.locator('.photo-row');
+  await rows.nth(0).getByRole('checkbox').check();
+  await expect(page.getByRole('button', { name: 'Copy status' })).toBeDisabled();
+  await rows.nth(1).getByRole('checkbox').check();
+  await page.getByRole('button', { name: 'Copy status' }).click();
+  await expect.poll(() => copyRequest).toEqual({ sourcePhotoId: 'source', targetPhotoIds: ['target'], fields: ['status'] });
+  await expect(rows.nth(1).locator('select.status-select')).toHaveValue('ownerOnly');
 });
 
 test('groups photos by import batch and keeps each group together', async ({ page }) => {

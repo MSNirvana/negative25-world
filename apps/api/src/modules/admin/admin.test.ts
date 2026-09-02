@@ -36,6 +36,9 @@ describe('admin API authorization', () => {
     const copy = await app.inject({ method: 'POST', url: '/api/v1/admin/spaces/primary/photos/bulk-copy', headers: { authorization }, payload: { sourcePhotoId: 'primary-photo-1', targetPhotoIds: ['missing-photo'], fields: ['rating'] } });
     expect(copy.statusCode).toBe(200);
     expect(copy.json()).toEqual({ photos: [], skippedIds: ['missing-photo'] });
+    const statusCopy = await app.inject({ method: 'POST', url: '/api/v1/admin/spaces/primary/photos/bulk-copy', headers: { authorization }, payload: { sourcePhotoId: 'primary-photo-1', targetPhotoIds: ['missing-photo'], fields: ['status'] } });
+    expect(statusCopy.statusCode).toBe(200);
+    expect(statusCopy.json()).toEqual({ photos: [], skippedIds: ['missing-photo'] });
     const deleted = await app.inject({ method: 'DELETE', url: '/api/v1/admin/spaces/primary/photos/primary-photo-1', headers: { authorization } });
     expect(deleted.statusCode).toBe(200);
     expect((await app.inject({ method: 'GET', url: '/api/v1/admin/spaces/primary/photos', headers: { authorization } })).json()).toEqual([]);

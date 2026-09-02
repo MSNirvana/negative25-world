@@ -398,7 +398,7 @@ export async function patchAdminPhoto(spaceSlug: string, photoId: string, patch:
   return authorized(`/admin/spaces/${encodeURIComponent(spaceSlug)}/photos/${encodeURIComponent(photoId)}`, token, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }, (value) => value as AdminPhoto);
 }
 
-export type AdminPhotoCopyField = 'location' | 'address' | 'rating';
+export type AdminPhotoCopyField = 'location' | 'address' | 'rating' | 'status';
 
 export async function copyAdminPhotoFields(spaceSlug: string, sourcePhotoId: string, targetPhotoIds: string[], fields: AdminPhotoCopyField[], token: string): Promise<{ photos: AdminPhoto[]; skippedIds: string[] }> {
   return authorized(`/admin/spaces/${encodeURIComponent(spaceSlug)}/photos/bulk-copy`, token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourcePhotoId, targetPhotoIds, fields }) }, (value) => value as { photos: AdminPhoto[]; skippedIds: string[] });

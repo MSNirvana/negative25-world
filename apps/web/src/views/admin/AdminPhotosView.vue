@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { Check, Copy, ImagePlus, MapPin, Star, Trash2, X } from 'lucide-vue-next';
+import { Check, Copy, Eye, ImagePlus, MapPin, Star, Trash2, X } from 'lucide-vue-next';
 import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { RouterLink } from 'vue-router';
 import { copyAdminPhotoFields, deleteAdminPhoto, deleteAdminPhotos, isApiConfigured, listAdminPhotos, patchAdminPhoto, type AdminPhoto, type AdminPhotoCopyField } from '../../api/client';
@@ -259,6 +259,7 @@ function replacePhotoById(next: AdminPhoto): void {
           <button type="button" class="tool-button subtle" :disabled="!canCopy" :title="t('admin.copyLocation')" @click="copyFields(['location'])"><MapPin :size="14" /> {{ t('admin.copyLocation') }}</button>
           <button type="button" class="tool-button subtle" :disabled="!canCopy" :title="t('admin.copyAddress')" @click="copyFields(['address'])">{{ t('admin.copyAddress') }}</button>
           <button type="button" class="tool-button subtle" :disabled="!canCopy" :title="t('admin.copyRating')" @click="copyFields(['rating'])"><Star :size="14" /> {{ t('admin.copyRating') }}</button>
+          <button type="button" class="tool-button subtle" :disabled="!canCopy" :title="t('admin.copyStatus')" @click="copyFields(['status'])"><Eye :size="14" /> {{ t('admin.copyStatus') }}</button>
           <button type="button" class="tool-button danger" :disabled="!canMutate" :title="t('admin.deleteSelected')" @click="removeSelected"><Trash2 :size="14" /> {{ t('admin.deleteSelected') }}</button>
           <button type="button" class="clear-selection" :title="t('admin.clearSelection')" @click="clearSelection"><X :size="14" /></button>
         </div>

@@ -53,7 +53,7 @@ type AdminPhotoCopyField = 'location' | 'address' | 'rating' | 'status';
 ## 数据流
 
 ```text
-选择照片 -> 点击复制状态 -> 前端提交 sourcePhotoId/targetPhotoIds/status
+选择照片 -> 点击复制状态 -> 前端提交 sourcePhotoId/targetPhotoIds/fields: ['status']
         -> API 鉴权与校验 -> AdminService 读取源状态
         -> 更新目标照片 -> 返回 photos/skippedIds
         -> 前端替换目标行并显示结果

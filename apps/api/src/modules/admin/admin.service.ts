@@ -5,7 +5,7 @@ import type { StorageAdapter } from '../media/storage.js';
 export type AdminPhoto = Pick<PhotoRecord, 'id' | 'workspaceId' | 'title' | 'description' | 'published' | 'hidden' | 'ownerOnly' | 'rating' | 'location' | 'latitude' | 'longitude' | 'metadata' | 'thumbnail' | 'media'> & { importBatch?: PhotoImportBatch };
 export type AdminPhotoLocationPatch = { name: string; latitude: number; longitude: number; displayAddress?: string; displayRegion?: string; displayRegionEnabled?: boolean } | null;
 export type AdminPhotoPatch = Partial<Pick<AdminPhoto, 'title' | 'description' | 'published' | 'hidden' | 'ownerOnly' | 'rating'>> & { location?: AdminPhotoLocationPatch };
-export type AdminPhotoCopyField = 'location' | 'address' | 'rating';
+export type AdminPhotoCopyField = 'location' | 'address' | 'rating' | 'status';
 export type AdminActor = { userId: string; workspaceId: string; role: 'owner' | 'admin' | 'editor' | 'viewer' };
 export type ElevationLookup = (coordinate: ElevationCoordinate) => Promise<number | undefined>;
 
@@ -90,6 +90,25 @@ export class AdminService {
       const sourceMetadata = source.metadata ?? {};
       const metadata = { ...(target.metadata ?? {}) };
       if (uniqueFields.includes('rating')) patch.rating = source.rating;
+      if (uniqueFields.includes('status')) {
+        const sourceOwnerOnly = source.ownerOnly === true || sourceMetadata.ownerOnly === true;
+        if (sourceOwnerOnly) {
+          patch.published = true;
+          patch.hidden = false;
+          patch.ownerOnly = true;
+          metadata.ownerOnly = true;
+        } else if (source.published && !source.hidden) {
+          patch.published = true;
+          patch.hidden = false;
+          patch.ownerOnly = false;
+          delete metadata.ownerOnly;
+        } else {
+          patch.published = false;
+          patch.hidden = true;
+          patch.ownerOnly = false;
+          delete metadata.ownerOnly;
+        }
+      }
       if (uniqueFields.includes('location')) {
         const latitude = numberValue(source.latitude ?? sourceMetadata.latitude);
         const longitude = numberValue(source.longitude ?? sourceMetadata.longitude);
@@ -131,7 +150,7 @@ export class AdminService {
         if (typeof sourceMetadata.displayRegionEnabled === 'boolean') metadata.displayRegionEnabled = sourceMetadata.displayRegionEnabled;
         else delete metadata.displayRegionEnabled;
       }
-      if (uniqueFields.includes('location') || uniqueFields.includes('address')) patch.metadata = metadata;
+      if (uniqueFields.includes('location') || uniqueFields.includes('address') || uniqueFields.includes('status')) patch.metadata = metadata;
       const result = await this.repository.updatePhoto(id, actor.workspaceId, patch, { includeImportBatch: true });
       if (result) updated.push(result as AdminPhoto);
       else skippedIds.push(id);
