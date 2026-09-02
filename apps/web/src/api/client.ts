@@ -61,6 +61,7 @@ export type AdminPhoto = {
   ownerOnly?: boolean;
   rating: number | null;
   thumbnail?: { url: string; width: number; height: number; format: string };
+  media?: Array<{ kind: string; url: string; width: number; height: number; format: string }>;
   location: { id: string; name: string } | null;
   latitude?: number;
   longitude?: number;
@@ -393,6 +394,20 @@ export type AdminPhotoLocationPatch = { name: string; latitude: number; longitud
 
 export async function patchAdminPhoto(spaceSlug: string, photoId: string, patch: Partial<Pick<AdminPhoto, 'published' | 'hidden' | 'ownerOnly' | 'title' | 'description' | 'rating'>> & { location?: AdminPhotoLocationPatch }, token: string): Promise<AdminPhoto> {
   return authorized(`/admin/spaces/${encodeURIComponent(spaceSlug)}/photos/${encodeURIComponent(photoId)}`, token, { method: 'PATCH', headers: { 'content-type': 'application/json' }, body: JSON.stringify(patch) }, (value) => value as AdminPhoto);
+}
+
+export type AdminPhotoCopyField = 'location' | 'address' | 'rating';
+
+export async function copyAdminPhotoFields(spaceSlug: string, sourcePhotoId: string, targetPhotoIds: string[], fields: AdminPhotoCopyField[], token: string): Promise<{ photos: AdminPhoto[]; skippedIds: string[] }> {
+  return authorized(`/admin/spaces/${encodeURIComponent(spaceSlug)}/photos/bulk-copy`, token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ sourcePhotoId, targetPhotoIds, fields }) }, (value) => value as { photos: AdminPhoto[]; skippedIds: string[] });
+}
+
+export async function deleteAdminPhoto(spaceSlug: string, photoId: string, token: string): Promise<void> {
+  await authorized(`/admin/spaces/${encodeURIComponent(spaceSlug)}/photos/${encodeURIComponent(photoId)}`, token, { method: 'DELETE' }, () => undefined);
+}
+
+export async function deleteAdminPhotos(spaceSlug: string, photoIds: string[], token: string): Promise<{ deletedIds: string[]; skippedIds: string[] }> {
+  return authorized(`/admin/spaces/${encodeURIComponent(spaceSlug)}/photos/bulk-delete`, token, { method: 'POST', headers: { 'content-type': 'application/json' }, body: JSON.stringify({ photoIds }) }, (value) => value as { deletedIds: string[]; skippedIds: string[] });
 }
 
 export async function fetchAlbums(spaceSlug = 'primary', signal?: AbortSignal): Promise<AlbumSummary[]> {

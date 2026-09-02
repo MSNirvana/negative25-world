@@ -38,7 +38,7 @@ test('gallery opens a photo detail view', async ({ page }) => {
 
 test('negative25 branding and canonical metadata are present', async ({ page }) => {
   await page.goto('/');
-  await expect(page).toHaveTitle('negative25 / photography archive');
+  await expect(page).toHaveTitle('N25');
   await expect(page.getByRole('button', { name: 'Go to negative25 home' })).toBeVisible();
   await expect(page.locator('link[rel="canonical"]')).toHaveAttribute('href', 'https://n25.world/');
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /negative25/);

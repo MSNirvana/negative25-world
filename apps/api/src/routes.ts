@@ -29,13 +29,14 @@ export async function registerRoutes(app: FastifyInstance): Promise<void> {
   const owner = await auth.seed();
   const workspaces = new WorkspaceService(repository);
   const elevationLookup = process.env.NODE_ENV === 'test' ? undefined : (coordinate: Parameters<typeof fetchElevation>[0]) => fetchElevation(coordinate, process.env.N25_ELEVATION_API_URL);
-  const admin = new AdminService(repository, elevationLookup);
+  const storage = createStorageAdapter();
+  const admin = new AdminService(repository, elevationLookup, storage);
   const primaryWorkspace = await repository.saveWorkspace({ id: PRIMARY_WORKSPACE_ID, slug: 'primary', name: 'negative25' });
   await repository.saveWorkspace({ id: OTHER_WORKSPACE_ID, slug: 'other', name: 'Field notes' });
   await repository.saveMembership({ workspaceId: primaryWorkspace.id, userId: owner.id, role: 'owner' });
   registerAuthRoutes(app, auth);
   registerWorkspaceRoutes(app, workspaces, auth);
-  const media = new MediaService(createStorageAdapter(), repository);
+  const media = new MediaService(storage, repository);
   const cleanupTimer = setInterval(() => { void media.cleanupExpiredUploads(); }, 15 * 60 * 1000);
   cleanupTimer.unref?.();
   app.addHook('onClose', async () => clearInterval(cleanupTimer));

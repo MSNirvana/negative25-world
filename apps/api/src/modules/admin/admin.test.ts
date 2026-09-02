@@ -29,6 +29,20 @@ describe('admin API authorization', () => {
     await app.close();
   });
 
+  it('supports bulk copy responses and single photo deletion', async () => {
+    const app = buildApp();
+    const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@n25.world', password: 'negative25' } });
+    const authorization = `Bearer ${login.json().accessToken}`;
+    const copy = await app.inject({ method: 'POST', url: '/api/v1/admin/spaces/primary/photos/bulk-copy', headers: { authorization }, payload: { sourcePhotoId: 'primary-photo-1', targetPhotoIds: ['missing-photo'], fields: ['rating'] } });
+    expect(copy.statusCode).toBe(200);
+    expect(copy.json()).toEqual({ photos: [], skippedIds: ['missing-photo'] });
+    const deleted = await app.inject({ method: 'DELETE', url: '/api/v1/admin/spaces/primary/photos/primary-photo-1', headers: { authorization } });
+    expect(deleted.statusCode).toBe(200);
+    expect((await app.inject({ method: 'GET', url: '/api/v1/admin/spaces/primary/photos', headers: { authorization } })).json()).toEqual([]);
+    expect((await app.inject({ method: 'DELETE', url: '/api/v1/admin/spaces/primary/photos/primary-photo-1', headers: { authorization } })).statusCode).toBe(404);
+    await app.close();
+  });
+
   it('supports saving and clearing a custom photo location', async () => {
     const app = buildApp();
     const login = await app.inject({ method: 'POST', url: '/api/v1/auth/login', payload: { email: 'owner@n25.world', password: 'negative25' } });

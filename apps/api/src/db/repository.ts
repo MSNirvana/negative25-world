@@ -83,6 +83,8 @@ export interface AppRepository {
   updateMembershipRole(workspaceId: string, userId: string, role: MembershipRecord['role']): Promise<boolean>;
   listPhotos(workspaceId: string): Promise<PhotoRecord[]>;
   findPhoto(workspaceId: string, id: string): Promise<PhotoRecord | undefined>;
+  listPhotoStorageKeys(workspaceId: string, id: string): Promise<string[]>;
+  deletePhoto(id: string, workspaceId: string): Promise<{ storageKeys: string[] } | undefined>;
   savePhoto(photo: PhotoRecord): Promise<void>;
   updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>): Promise<PhotoRecord | undefined>;
   listAlbums(workspaceId: string, publishedOnly?: boolean): Promise<AlbumRecord[]>;
@@ -168,6 +170,24 @@ export class MemoryRepository implements AppRepository {
   async updateMembershipRole(workspaceId: string, userId: string, role: MembershipRecord['role']) { const membership = this.memberships.get(`${workspaceId}:${userId}`); if (!membership) return false; membership.role = role; return true; }
   async listPhotos(workspaceId: string) { return [...this.photos.values()].filter((photo) => photo.workspaceId === workspaceId).map((photo) => ({ ...photo })); }
   async findPhoto(workspaceId: string, id: string) { const photo = this.photos.get(id); return photo?.workspaceId === workspaceId ? { ...photo } : undefined; }
+  async listPhotoStorageKeys(workspaceId: string, id: string) {
+    const photo = await this.findPhoto(workspaceId, id);
+    if (!photo) return [];
+    const metadata = photo.metadata ?? {};
+    const keys = Array.isArray(metadata.storageKeys) ? metadata.storageKeys : metadata.storageKey ? [metadata.storageKey] : [];
+    return keys.filter((key): key is string => typeof key === 'string' && key.trim().length > 0);
+  }
+  async deletePhoto(id: string, workspaceId: string) {
+    const photo = await this.findPhoto(workspaceId, id);
+    if (!photo) return undefined;
+    const storageKeys = await this.listPhotoStorageKeys(workspaceId, id);
+    this.photos.delete(id);
+    for (const album of this.albums.values()) {
+      album.photoIds = album.photoIds.filter((photoId) => photoId !== id);
+      if (album.coverPhotoId === id) album.coverPhotoId = null;
+    }
+    return { storageKeys };
+  }
   async savePhoto(photo: PhotoRecord) { this.photos.set(photo.id, { ...photo }); }
   async updatePhoto(id: string, workspaceId: string, patch: Partial<PhotoRecord>) { const photo = await this.findPhoto(workspaceId, id); if (!photo) return undefined; const updated = { ...photo, ...patch }; await this.savePhoto(updated); return updated; }
   async listAlbums(workspaceId: string, publishedOnly = false) {
@@ -323,6 +343,18 @@ export class PostgresRepository implements AppRepository {
     if (!rows[0]) return undefined;
     const files = await this.db`SELECT photo_id AS "photoId", kind, storage_key AS "storageKey", width, height, format FROM photo_files WHERE photo_id = ${id}`;
     return toPhotoRecord(rows[0] as Record<string, unknown>, files as unknown as Array<Record<string, unknown>>);
+  }
+  async listPhotoStorageKeys(workspaceId: string, id: string) {
+    const rows = await this.db`SELECT pf.storage_key AS "storageKey"
+      FROM photo_files pf JOIN photos p ON p.id = pf.photo_id
+      WHERE p.workspace_id = ${workspaceId} AND p.id = ${id}
+      ORDER BY pf.kind, pf.storage_key`;
+    return rows.map((row) => String(row.storageKey));
+  }
+  async deletePhoto(id: string, workspaceId: string) {
+    const storageKeys = await this.listPhotoStorageKeys(workspaceId, id);
+    const result = await this.db`DELETE FROM photos WHERE id = ${id} AND workspace_id = ${workspaceId}`;
+    return result.count > 0 ? { storageKeys } : undefined;
   }
   async savePhoto(photo: PhotoRecord) {
     const metadata = objectValue(photo.metadata);

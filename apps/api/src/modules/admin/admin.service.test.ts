@@ -1,6 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { MemoryRepository, PRIMARY_WORKSPACE_ID } from '../../db/repository.js';
 import { AdminService } from './admin.service.js';
+import type { StorageAdapter } from '../media/storage.js';
 
 describe('AdminService elevation persistence', () => {
   it('stores display address settings alongside the standard location', async () => {
@@ -56,5 +57,47 @@ describe('AdminService elevation persistence', () => {
 
     expect(lookupElevation).not.toHaveBeenCalled();
     expect(updated.metadata).toMatchObject({ altitude: 88.2 });
+  });
+});
+
+describe('AdminService photo management', () => {
+  const actor = { userId: 'owner', workspaceId: PRIMARY_WORKSPACE_ID, role: 'owner' as const };
+
+  it('copies only the selected metadata fields from the first photo', async () => {
+    const repository = new MemoryRepository();
+    await repository.savePhoto({ id: 'source-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Source', description: '', published: true, hidden: false, rating: 7, latitude: 39.9, longitude: 116.4, location: { id: 'source-location', name: '北京故宫' }, metadata: { displayAddress: '午门', displayRegion: '北京市', displayRegionEnabled: true, latitude: 39.9, longitude: 116.4, altitude: 50 } });
+    await repository.savePhoto({ id: 'target-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Target', description: '', published: true, hidden: false, rating: 2, location: null, metadata: { displayAddress: '原地址', custom: 'keep' } });
+    const service = new AdminService(repository);
+
+    const result = await service.copyPhotoFields(actor, 'source-photo', ['target-photo'], ['rating']);
+
+    expect(result.skippedIds).toEqual([]);
+    expect(result.photos[0]).toMatchObject({ id: 'target-photo', rating: 7, location: null, metadata: { displayAddress: '原地址', custom: 'keep' } });
+  });
+
+  it('copies location and address fields together and preserves target-only metadata', async () => {
+    const repository = new MemoryRepository();
+    await repository.savePhoto({ id: 'source-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Source', description: '', published: true, hidden: false, rating: null, latitude: 39.9, longitude: 116.4, location: { id: 'source-location', name: '北京故宫' }, metadata: { displayAddress: '午门', displayRegion: '北京市', displayRegionEnabled: true, latitude: 39.9, longitude: 116.4, altitude: 50 } });
+    await repository.savePhoto({ id: 'target-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Target', description: '', published: true, hidden: false, rating: 2, location: null, metadata: { custom: 'keep' } });
+    const service = new AdminService(repository);
+
+    const result = await service.copyPhotoFields(actor, 'source-photo', ['target-photo'], ['location', 'address']);
+
+    expect(result.photos[0]).toMatchObject({ location: { name: '北京故宫' }, latitude: 39.9, longitude: 116.4, metadata: { displayAddress: '午门', displayRegion: '北京市', displayRegionEnabled: true, altitude: 50, custom: 'keep' } });
+  });
+
+  it('deletes a photo, removes album references, and cleans its storage variants', async () => {
+    const repository = new MemoryRepository();
+    await repository.savePhoto({ id: 'delete-photo', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Delete me', description: '', published: true, hidden: false, rating: null, metadata: { storageKeys: ['photos/delete/original.jpg', 'photos/delete/thumbnail.jpg'] } });
+    await repository.saveAlbum({ id: 'album-delete', workspaceId: PRIMARY_WORKSPACE_ID, title: 'Album', coverPhotoId: 'delete-photo', sortOrder: 0, photoIds: ['delete-photo'] });
+    const deletedKeys: string[] = [];
+    const storage = { deleteObject: async (key: string) => { deletedKeys.push(key); } } as unknown as StorageAdapter;
+    const service = new AdminService(repository, undefined, storage);
+
+    await service.deletePhoto(actor, 'delete-photo');
+
+    await expect(repository.findPhoto(PRIMARY_WORKSPACE_ID, 'delete-photo')).resolves.toBeUndefined();
+    await expect(repository.findAlbum(PRIMARY_WORKSPACE_ID, 'album-delete')).resolves.toMatchObject({ coverPhotoId: null, photoIds: [] });
+    expect(deletedKeys).toEqual(['photos/delete/original.jpg', 'photos/delete/thumbnail.jpg']);
   });
 });

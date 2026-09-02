@@ -19,6 +19,13 @@ const targetHeight = computed(() => {
   if (width.value < 1500) return 235;
   return 270;
 });
+const maxPhotosPerRow = computed(() => {
+  if (width.value < 620) return 5;
+  if (width.value < 1000) return 7;
+  if (width.value < 1500) return 8;
+  // Keep wide desktop rows from turning a small set of portraits into oversized tiles.
+  return 10;
+});
 
 const rows = computed<PhotoRow[]>(() => {
   const availableWidth = Math.max(width.value, 720);
@@ -38,7 +45,7 @@ const rows = computed<PhotoRow[]>(() => {
     const projectedRatio = ratioSum + ratio;
     const projectedHeight = (availableWidth - gap * (projectedCount - 1)) / projectedRatio;
     const currentHeight = current.length ? (availableWidth - gap * (current.length - 1)) / ratioSum : Infinity;
-    const shouldBreak = current.length >= 1 && current.length >= 5;
+    const shouldBreak = current.length >= 1 && current.length >= maxPhotosPerRow.value;
     const wouldBeTooShort = current.length >= 1 && projectedHeight < targetHeight.value * 0.76;
     const currentIsCloser = Math.abs(currentHeight - targetHeight.value) <= Math.abs(projectedHeight - targetHeight.value);
 
