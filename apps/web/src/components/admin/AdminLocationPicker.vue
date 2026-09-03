@@ -3,6 +3,7 @@ import { load as loadAMap } from '@amap/amap-jsapi-loader';
 import { LoaderCircle, MapPin, Search, Trash2 } from 'lucide-vue-next';
 import { onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { fromAMapCoordinates, toAMapCoordinates } from '../../lib/discover-map-data';
+import { formatCoordinate, parseCoordinatePair, type EditableCoordinates } from '../../lib/admin-location-coordinates';
 import type { PhotoCoordinates } from '../../stores/gallery';
 import { useLocale } from '../../i18n';
 import { mapStyleForTheme, useTheme } from '../../theme';
@@ -22,6 +23,8 @@ const props = withDefaults(defineProps<{
 
 const emit = defineEmits<{
   (event: 'select', selection: LocationSelection): void;
+  (event: 'update:name', value: string): void;
+  (event: 'coordinates-change', coordinates: EditableCoordinates): void;
   (event: 'clear'): void;
   (event: 'error', message: string): void;
 }>();
@@ -40,6 +43,9 @@ const error = ref<string | null>(null);
 const query = ref(props.name);
 const searching = ref(false);
 const suggestions = ref<LocationSuggestion[]>([]);
+const latitudeInput = ref(formatCoordinate(props.latitude));
+const longitudeInput = ref(formatCoordinate(props.longitude));
+const coordinateError = ref<string | null>(null);
 
 function hasCoordinates(): boolean {
   return Number.isFinite(props.latitude) && Number.isFinite(props.longitude);
@@ -61,6 +67,17 @@ function placeMarker(position: [number, number]): void {
   marker.value?.setMap(null);
   marker.value = new currentAMap.Marker({ position });
   marker.value.setMap(currentMap);
+}
+
+function updateCoordinateInputs(coordinates: EditableCoordinates | null): void {
+  latitudeInput.value = formatCoordinate(coordinates?.latitude);
+  longitudeInput.value = formatCoordinate(coordinates?.longitude);
+}
+
+function syncMapToCoordinates(coordinates: EditableCoordinates): void {
+  const position = toAMapCoordinates(coordinates);
+  placeMarker(position);
+  map.value?.setCenter(position);
 }
 
 function valueFromLocation(value: unknown): [number, number] | undefined {
@@ -91,8 +108,34 @@ function suggestionFromPlace(value: unknown): LocationSuggestion | undefined {
 
 function emitPosition(position: [number, number], name = query.value.trim(), displayAddress = name, region = ''): void {
   const coordinates = fromAMapCoordinates(position);
+  updateCoordinateInputs(coordinates);
+  coordinateError.value = null;
   placeMarker(position);
   emit('select', { name, displayAddress, region, latitude: coordinates.latitude, longitude: coordinates.longitude });
+}
+
+function commitCoordinateInputs(): void {
+  if (props.disabled) return;
+  const coordinates = parseCoordinatePair(latitudeInput.value, longitudeInput.value);
+  if (!coordinates) {
+    coordinateError.value = t('admin.locationCoordinatesError');
+    return;
+  }
+  coordinateError.value = null;
+  updateCoordinateInputs(coordinates);
+  syncMapToCoordinates(coordinates);
+  emit('coordinates-change', coordinates);
+}
+
+function handleMapClick(event: { lnglat?: unknown }): void {
+  if (props.disabled) return;
+  const position = valueFromLocation(event.lnglat);
+  if (!position) return;
+  const coordinates = fromAMapCoordinates(position);
+  coordinateError.value = null;
+  updateCoordinateInputs(coordinates);
+  placeMarker(position);
+  emit('coordinates-change', coordinates);
 }
 
 function search(): void {
@@ -132,6 +175,8 @@ function clear(): void {
   query.value = '';
   suggestions.value = [];
   error.value = null;
+  coordinateError.value = null;
+  updateCoordinateInputs(null);
   emit('clear');
 }
 
@@ -148,6 +193,7 @@ async function initMap(): Promise<void> {
     amap.value = runtime;
     placeSearch.value = new runtime.PlaceSearch({ city: '全国', pageSize: 5, pageIndex: 1, extensions: 'all' });
     map.value = new runtime.Map(mapContainer.value, { center: mapPosition(), zoom: hasCoordinates() ? 12 : 4, mapStyle: mapStyleForTheme(theme.value), resizeEnable: true } as AMap.Map.Options);
+    map.value.on('click', handleMapClick);
     const selected = mapPosition();
     if (hasCoordinates()) placeMarker(selected);
     loading.value = false;
@@ -158,17 +204,18 @@ async function initMap(): Promise<void> {
   }
 }
 
-watch(() => props.name, (value) => { if (!query.value.trim()) query.value = value; });
-watch(query, () => { suggestions.value = []; });
+watch(() => props.name, (value) => { if (query.value !== value && !query.value.trim()) query.value = value; });
+watch(query, (value) => { suggestions.value = []; emit('update:name', value); });
 watch(theme, (next) => { map.value?.setMapStyle(mapStyleForTheme(next)); });
 watch(() => [props.latitude, props.longitude], () => {
-  if (!map.value || !hasCoordinates()) return;
-  const position = mapPosition();
-  map.value.setCenter(position);
-  placeMarker(position);
+  const coordinates = currentCoordinates();
+  updateCoordinateInputs(coordinates ?? null);
+  coordinateError.value = null;
+  if (!map.value || !coordinates) return;
+  syncMapToCoordinates(coordinates);
 });
 onMounted(() => { void initMap(); });
-onBeforeUnmount(() => { marker.value?.setMap(null); marker.value = null; map.value?.destroy(); map.value = null; });
+onBeforeUnmount(() => { map.value?.off('click', handleMapClick); marker.value?.setMap(null); marker.value = null; map.value?.destroy(); map.value = null; });
 </script>
 
 <template>
@@ -188,6 +235,11 @@ onBeforeUnmount(() => { marker.value?.setMap(null); marker.value = null; map.val
     <div ref="mapContainer" class="location-map" :aria-busy="loading" />
     <div v-if="loading" class="location-map-status"><LoaderCircle :size="14" class="spin" /> {{ t('admin.locationMapLoading') }}</div>
     <div v-else-if="error" class="location-map-status location-map-error">{{ error }}</div>
+    <div class="location-coordinates">
+      <label><span>{{ t('admin.latitude') }}</span><input v-model="latitudeInput" inputmode="decimal" autocomplete="off" :placeholder="t('admin.latitudePlaceholder')" :disabled="disabled" @blur="commitCoordinateInputs" @keydown.enter.prevent="commitCoordinateInputs" /></label>
+      <label><span>{{ t('admin.longitude') }}</span><input v-model="longitudeInput" inputmode="decimal" autocomplete="off" :placeholder="t('admin.longitudePlaceholder')" :disabled="disabled" @blur="commitCoordinateInputs" @keydown.enter.prevent="commitCoordinateInputs" /></label>
+    </div>
+    <p v-if="coordinateError" class="coordinate-error" role="alert">{{ coordinateError }}</p>
     <p class="location-help"><MapPin :size="14" /> {{ t('admin.locationMapHint') }}</p>
     <button type="button" class="clear-location" :disabled="disabled" @click="clear"><Trash2 :size="14" /> {{ t('admin.clearLocation') }}</button>
   </div>
@@ -211,8 +263,14 @@ onBeforeUnmount(() => { marker.value?.setMap(null); marker.value = null; map.val
 .location-map { background: var(--map-paper); border: 1px solid var(--line); height: 210px; overflow: hidden; width: 100%; }
 .location-map-status { align-items: center; background: var(--surface-soft); color: var(--muted); display: flex; font-size: 11px; gap: 6px; justify-content: center; margin-top: -220px; min-height: 210px; pointer-events: none; position: relative; }
 .location-map-error { color: var(--accent-deep); padding: 18px; text-align: center; }
+.location-coordinates { display: grid; gap: 8px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.location-coordinates label { display: grid; gap: 5px; }
+.location-coordinates label span { color: var(--muted); font-size: 11px; }
+.location-coordinates input { min-width: 0; }
+.coordinate-error { color: var(--accent-deep); font-size: 11px; margin: -2px 0 0; }
 .location-help { align-items: center; color: var(--muted); display: flex; font-size: 11px; gap: 5px; margin: 0; }
 .clear-location { justify-self: start; font-size: 11px; }
 .spin { animation: spin 1s linear infinite; }
 @keyframes spin { to { transform: rotate(360deg); } }
+@media (max-width: 520px) { .location-coordinates { grid-template-columns: 1fr; } }
 </style>

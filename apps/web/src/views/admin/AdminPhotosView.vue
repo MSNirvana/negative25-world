@@ -193,6 +193,10 @@ async function saveEdit(photo: ViewPhoto): Promise<void> {
       error.value = t('admin.locationCoordinatesError');
       return;
     }
+    if (hasLocation && !draft.value.locationName.trim()) {
+      error.value = t('admin.locationNameRequired');
+      return;
+    }
     const updated = await patchAdminPhoto(workspace.slug, photo.id, {
       title: draft.value.title.trim(),
       description: draft.value.description.trim(),
@@ -234,6 +238,15 @@ function applyLocation(selection: { name: string; displayAddress: string; region
   draft.value.displayRegionEnabled = true;
   draft.value.latitude = selection.latitude;
   draft.value.longitude = selection.longitude;
+}
+function applyCoordinates(coordinates: { latitude: number; longitude: number }): void {
+  draft.value.latitude = coordinates.latitude;
+  draft.value.longitude = coordinates.longitude;
+  draft.value.displayRegion = '';
+  draft.value.displayRegionEnabled = false;
+}
+function updateLocationName(value: string): void {
+  draft.value.locationName = value;
 }
 function clearLocation(): void {
   draft.value.locationName = '';
@@ -293,7 +306,7 @@ watch(groupedFilteredPhotos, (groups) => {
               <div class="photo-row" :class="{ selected: isSelected(photo.id) }" role="row"><label class="row-check"><input type="checkbox" :checked="isSelected(photo.id)" :aria-label="t('admin.editPhoto')" @change="toggleSelected(photo.id)" /></label><div class="photo-name"><button v-if="photo.thumbnail?.url" type="button" class="thumb-button" :aria-label="t('admin.previewPhoto')" @click.stop="openPreview(photo)"><img class="mini-thumb" :src="photo.thumbnail.url" :alt="photo.title" /></button><span v-else class="mini-thumb"></span><strong>{{ photo.title || t('admin.untitledPhoto') }}</strong></div><span class="muted">{{ locationLabel(photo) }}</span><select class="status-select" :value="photoStatus(photo)" :disabled="statusSavingId === photo.id" :aria-label="t('admin.tableStatus')" @change="changeStatus(photo, $event)"><option value="published">{{ t('admin.published') }}</option><option value="ownerOnly">{{ t('admin.ownerOnly') }}</option><option value="hidden">{{ t('admin.hidden') }}</option></select><span class="row-actions"><button class="delete-single" type="button" :aria-label="t('admin.deletePhoto')" :title="t('admin.deletePhoto')" :disabled="!canMutate" @click="removeOne(photo)"><Trash2 :size="15" /></button><button class="more" type="button" :aria-label="t('admin.editPhoto')" @click="beginEdit(photo)">...</button></span></div>
               <form v-if="editingId === photo.id" class="editor" @submit.prevent="saveEdit(photo)">
                 <div class="editor-fields"><label>{{ t('admin.title') }}<input v-model="draft.title" maxlength="240" required /></label><label>{{ t('admin.description') }}<textarea v-model="draft.description" maxlength="5000" rows="3"></textarea></label><label>{{ t('admin.rating') }}<input v-model="draft.rating" inputmode="numeric" min="0" max="7" :placeholder="t('admin.ratingPlaceholder')" /></label></div>
-                <AdminLocationPicker :name="draft.locationName" :latitude="draft.latitude" :longitude="draft.longitude" :disabled="saving" @select="applyLocation" @clear="clearLocation" />
+                <AdminLocationPicker :name="draft.locationName" :latitude="draft.latitude" :longitude="draft.longitude" :disabled="saving" @select="applyLocation" @update:name="updateLocationName" @coordinates-change="applyCoordinates" @clear="clearLocation" />
                 <div class="display-location-fields">
                   <label>{{ t('admin.displayAddress') }}<input v-model="draft.displayAddress" maxlength="240" :placeholder="t('admin.displayAddressPlaceholder')" :disabled="saving" /></label>
                   <label class="prefix-toggle"><input v-model="draft.displayRegionEnabled" type="checkbox" :disabled="saving || draft.latitude === null || draft.longitude === null" /><span>{{ t('admin.displayRegionPrefix') }}<small v-if="draft.displayRegion">{{ draft.displayRegion }}</small></span></label>
