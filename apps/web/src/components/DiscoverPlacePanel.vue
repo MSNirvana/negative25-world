@@ -1,6 +1,6 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, onMounted, ref } from 'vue';
-import { ChevronDown, ChevronRight, ImageOff, MapPin, Search } from 'lucide-vue-next';
+import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { ArrowLeft, ChevronDown, ChevronRight, ImageOff, MapPin, Search } from 'lucide-vue-next';
 import type { GalleryPhoto } from '../stores/gallery';
 import { DISCOVER_GROUPS, filterLocations, type DiscoverGroupId, type DiscoverLocation } from '../lib/discover-map-data';
 import { useLocale } from '../i18n';
@@ -8,35 +8,35 @@ import { useLocale } from '../i18n';
 const props = withDefaults(defineProps<{
   locations: DiscoverLocation[];
   unlocatedPhotos: GalleryPhoto[];
-  selectedId?: string | null;
   locationError?: string | null;
-}>(), { selectedId: null, locationError: null });
+}>(), { locationError: null });
 
 const emit = defineEmits<{
-  (event: 'select-location', location: DiscoverLocation): void;
   (event: 'select-photo', photo: GalleryPhoto): void;
 }>();
 
 const query = ref('');
 const expanded = ref(true);
+const expandedGroups = ref<Record<'featured' | 'recent', boolean>>({ featured: true, recent: true });
+const selectedLocation = ref<DiscoverLocation | null>(null);
 const mobile = ref(false);
 const { t } = useLocale();
 let mediaQuery: MediaQueryList | null = null;
 
-// Keep the map's place panel compact while the desktop detail view is open.
-const compact = computed(() => Boolean(props.selectedId) && !mobile.value);
-
-const searchedLocations = computed(() => filterLocations(props.locations, query.value));
-const sections = computed(() => DISCOVER_GROUPS.filter((group) => group.id !== 'unlocated').map((group) => ({ group, locations: locationsForGroup(group.id) })).filter((section) => section.locations.length));
-const unlocated = computed(() => {
-  const normalized = query.value.trim().toLowerCase();
-  if (!normalized) return props.unlocatedPhotos;
-  return props.unlocatedPhotos.filter((photo) => `${photo.title} ${photo.caption}`.toLowerCase().includes(normalized));
+const hasSearch = computed(() => query.value.trim().length > 0);
+const searchResults = computed(() => filterLocations(props.locations, query.value));
+const searchPhotoResults = computed(() => {
+  const needle = query.value.trim().toLocaleLowerCase();
+  if (!needle) return [];
+  return props.unlocatedPhotos.filter((photo) => `${photo.title} ${photo.caption} ${photo.location}`.toLocaleLowerCase().includes(needle));
 });
-const mappedCount = computed(() => searchedLocations.value.length);
+const sections = computed(() => DISCOVER_GROUPS.filter((group) => group.id !== 'unlocated').map((group) => ({ group, locations: locationsForGroup(group.id) })).filter((section) => section.locations.length));
+const featuredLocations = computed(() => locationsForGroup('featured'));
+const unlocated = computed(() => props.unlocatedPhotos);
+const mappedCount = computed(() => props.locations.length);
 
 function locationsForGroup(group: DiscoverGroupId): DiscoverLocation[] {
-  const locations = searchedLocations.value;
+  const locations = props.locations;
   if (group === 'featured') return [...locations].sort((a, b) => (b.photos.length - a.photos.length) || a.name.localeCompare(b.name)).slice(0, 10);
   if (group === 'recent') return [...locations].sort((a, b) => latestPhotoTime(b) - latestPhotoTime(a)).slice(0, 10);
   return locations.filter((location) => location.group === group);
@@ -47,7 +47,7 @@ function latestPhotoTime(location: DiscoverLocation): number {
   return location.photos.reduce((latest, photo) => Math.max(latest, Date.parse(photo.capturedAt) || 0), 0);
 }
 
-function selectLocation(location: DiscoverLocation): void { emit('select-location', location); }
+function selectLocation(location: DiscoverLocation): void { selectedLocation.value = location; }
 function selectPhoto(photo: GalleryPhoto): void { emit('select-photo', photo); }
 function onRailWheel(event: WheelEvent): void {
   const rail = event.currentTarget as HTMLElement;
@@ -57,7 +57,14 @@ function onRailWheel(event: WheelEvent): void {
   event.preventDefault();
 }
 function toggleExpanded(): void { expanded.value = !expanded.value; }
+function toggleGroup(group: 'featured' | 'recent'): void { expandedGroups.value[group] = !expandedGroups.value[group]; }
+function isGroupCollapsible(group: DiscoverGroupId): group is 'featured' | 'recent' { return group === 'featured' || group === 'recent'; }
+function isGroupExpanded(group: DiscoverGroupId): boolean { return !isGroupCollapsible(group) || expandedGroups.value[group]; }
+function clearSearch(): void { query.value = ''; selectedLocation.value = null; }
+function backToSearch(): void { selectedLocation.value = null; }
 function onMediaChange(event: MediaQueryListEvent): void { mobile.value = event.matches; if (!event.matches) expanded.value = true; }
+
+watch(query, () => { selectedLocation.value = null; });
 
 onMounted(() => {
   mediaQuery = window.matchMedia('(max-width: 680px)');
@@ -69,32 +76,65 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
 </script>
 
 <template>
-  <aside class="place-panel" :class="{ expanded, mobile, compact }" :aria-label="t('discover.places')" @click.stop @pointerdown.stop @pointermove.stop @touchstart.stop @touchmove.stop @wheel.stop>
-    <button class="panel-toggle" :aria-expanded="expanded && !compact" :aria-label="t('discover.togglePanel')" @click="toggleExpanded">
+  <aside class="place-panel" :class="{ expanded, mobile }" :aria-label="t('discover.places')" @click.stop @pointerdown.stop @pointermove.stop @touchstart.stop @touchmove.stop @wheel.stop>
+    <button class="panel-toggle" :aria-expanded="expanded" :aria-label="t('discover.togglePanel')" @click="toggleExpanded">
       <ChevronDown :size="19" />
     </button>
     <div class="panel-scroll">
       <label class="place-search">
         <Search :size="16" aria-hidden="true" />
         <input v-model="query" type="search" :placeholder="t('discover.searchPlaceholder')" :aria-label="t('discover.searchLabel')" />
-        <button v-if="query" class="clear-search" type="button" :aria-label="t('discover.clearSearch')" @click="query = ''">×</button>
+        <button v-if="query" class="clear-search" type="button" :aria-label="t('discover.clearSearch')" @click="clearSearch">×</button>
       </label>
 
-      <div class="panel-meta">
+      <div v-if="!hasSearch && !selectedLocation" class="panel-meta">
         <span>{{ t('discover.fieldNotes') }}</span>
         <strong>{{ t('discover.mappedCount', { count: mappedCount }) }}</strong>
       </div>
 
       <p v-if="locationError" class="panel-notice" role="status">{{ t('discover.locationUnavailable') }}</p>
 
-      <template v-if="expanded && !compact">
-        <section v-for="section in sections" :key="section.group.id" class="place-section" :aria-labelledby="`group-${section.group.id}`">
-          <div class="section-heading">
-            <h2 :id="`group-${section.group.id}`">{{ groupLabel(section.group.id) }}</h2>
-            <span>{{ section.locations.length }}</span>
+      <section v-if="selectedLocation" class="location-result" :aria-label="selectedLocation.name">
+        <header class="result-heading">
+          <button class="result-back" type="button" :aria-label="t('discover.backToSearch')" @click="backToSearch"><ArrowLeft :size="16" /></button>
+          <div>
+            <h2>{{ selectedLocation.name }}</h2>
+            <small>{{ groupLabel(selectedLocation.group) }}</small>
           </div>
-          <div class="place-rail" tabindex="0" :aria-label="t('discover.locationGroup', { group: groupLabel(section.group.id) })" @wheel.stop="onRailWheel">
-            <button v-for="location in section.locations" :key="location.id" class="place-card" :class="{ selected: selectedId === location.id }" :aria-label="t('discover.locationMarker', { name: location.name, count: t('discover.photoCount', { count: location.photos.length }) })" @click="selectLocation(location)">
+          <span>{{ selectedLocation.photos.length }}</span>
+        </header>
+        <div v-if="selectedLocation.photos.length" class="result-grid">
+          <button v-for="photo in selectedLocation.photos" :key="photo.id" class="result-photo" type="button" :aria-label="t('photo.open', { title: photo.title })" @click="selectPhoto(photo)">
+            <img :src="photo.image" :alt="photo.title" loading="lazy" />
+          </button>
+        </div>
+        <div v-else class="panel-empty"><MapPin :size="18" /><p>{{ t('discover.markedNoPhotos') }}</p></div>
+      </section>
+
+      <section v-else-if="hasSearch" class="search-results" :aria-label="t('discover.searchLabel')">
+        <button v-for="location in searchResults" :key="location.id" class="search-result" type="button" @click="selectLocation(location)">
+          <span class="search-result-copy"><strong>{{ location.name }}</strong><small>{{ groupLabel(location.group) }}</small></span>
+          <span class="search-result-count">{{ location.photos.length }}</span>
+          <ChevronRight :size="16" aria-hidden="true" />
+        </button>
+        <template v-if="!searchResults.length">
+          <button v-for="photo in searchPhotoResults" :key="photo.id" class="search-result" type="button" :aria-label="t('discover.unlocatedPhoto', { title: photo.title })" @click="selectPhoto(photo)">
+            <span class="search-result-copy"><strong>{{ photo.title }}</strong><small>{{ t('discover.unlocated') }}</small></span>
+            <ChevronRight :size="16" aria-hidden="true" />
+          </button>
+        </template>
+        <div v-if="!searchResults.length && !searchPhotoResults.length" class="panel-empty"><MapPin :size="18" /><p>{{ t('discover.noMatch') }}</p></div>
+      </section>
+
+      <template v-else-if="expanded">
+        <section v-for="section in sections" :key="section.group.id" class="place-section" :aria-labelledby="`group-${section.group.id}`">
+          <button v-if="isGroupCollapsible(section.group.id)" class="section-toggle" type="button" :aria-expanded="isGroupExpanded(section.group.id)" @click="toggleGroup(section.group.id)">
+            <span class="section-heading"><h2 :id="`group-${section.group.id}`">{{ groupLabel(section.group.id) }}</h2><span>{{ section.locations.length }}</span></span>
+            <ChevronDown :size="18" aria-hidden="true" />
+          </button>
+          <div v-else class="section-heading"><h2 :id="`group-${section.group.id}`">{{ groupLabel(section.group.id) }}</h2><span>{{ section.locations.length }}</span></div>
+          <div v-if="isGroupExpanded(section.group.id)" class="place-rail" tabindex="0" :aria-label="t('discover.locationGroup', { group: groupLabel(section.group.id) })" @wheel.stop="onRailWheel">
+            <button v-for="location in section.locations" :key="location.id" class="place-card" :aria-label="t('discover.locationMarker', { name: location.name, count: t('discover.photoCount', { count: location.photos.length }) })" @click="selectLocation(location)">
               <span v-if="location.coverPhoto" class="card-image" :style="{ backgroundImage: `url(${location.coverPhoto.image})` }"></span>
               <span v-else class="card-image card-image-empty"><MapPin :size="21" /></span>
               <span class="card-scrim" aria-hidden="true"></span>
@@ -126,9 +166,12 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
         </div>
       </template>
       <section v-else class="place-section peek-section" :aria-label="t('discover.group.featured')">
-        <div class="section-heading"><h2>{{ t('discover.group.featured') }}</h2><span>{{ sections[0]?.locations.length || 0 }}</span></div>
-        <div v-if="sections[0]?.locations.length" class="place-rail" @wheel.stop="onRailWheel">
-          <button v-for="location in sections[0].locations.slice(0, 3)" :key="location.id" class="place-card" @click="selectLocation(location)">
+        <button class="section-toggle" type="button" :aria-expanded="false" @click="expanded = true">
+          <span class="section-heading"><h2>{{ t('discover.group.featured') }}</h2><span>{{ featuredLocations.length }}</span></span>
+          <ChevronDown :size="18" aria-hidden="true" />
+        </button>
+        <div v-if="featuredLocations.length" class="place-rail" @wheel.stop="onRailWheel">
+          <button v-for="location in featuredLocations.slice(0, 3)" :key="location.id" class="place-card" @click="selectLocation(location)">
             <span v-if="location.coverPhoto" class="card-image" :style="{ backgroundImage: `url(${location.coverPhoto.image})` }"></span>
             <span v-else class="card-image card-image-empty"><MapPin :size="21" /></span>
             <span class="card-scrim" aria-hidden="true"></span>
@@ -147,11 +190,9 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
 .place-panel.mobile:not(.expanded) { height: 158px; }
 .place-panel.mobile.expanded { height: min(62svh, 560px); }
 .place-panel:not(.mobile):not(.expanded) { height: 158px; }
-.place-panel:not(.mobile).compact { height: 158px; }
 .panel-toggle { align-items: center; background: transparent; color: var(--map-muted); display: flex; height: 34px; justify-content: center; padding: 0; position: absolute; right: 0; top: 0; width: 100%; z-index: 2; }
 .panel-toggle svg { transition: transform .24s ease; }
 .place-panel:not(.expanded) .panel-toggle svg { transform: rotate(180deg); }
-.place-panel.compact .panel-toggle svg { transform: rotate(180deg); }
 .panel-scroll { height: 100%; overflow: auto hidden; padding: 34px 16px 40px; scrollbar-width: thin; }
 .place-search { align-items: center; border: 1px solid var(--map-line); border-radius: 999px; color: var(--map-muted); display: flex; gap: 8px; min-height: 31px; padding: 5px 11px; }
 .place-search input { background: transparent; border: 0; color: var(--map-ink); font-size: 13px; min-width: 0; outline: 0; width: 100%; }
@@ -163,8 +204,32 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
 .place-section { margin-top: 26px; }
 .section-heading { align-items: baseline; display: flex; gap: 9px; margin-bottom: 11px; }
 .section-heading h2 { font-family: Georgia, ui-serif, serif; font-size: 21px; font-weight: 500; line-height: 1.2; margin: 0; }
-.section-heading h2::after { color: var(--map-muted); content: '›'; font-family: inherit; font-size: 24px; margin-left: 6px; vertical-align: -1px; }
+.section-heading h2::after { content: none; }
 .section-heading span { color: var(--map-muted); font-size: 11px; }
+.section-toggle { align-items: center; background: transparent; color: inherit; display: flex; justify-content: space-between; padding: 0; width: 100%; }
+.section-toggle > svg { color: var(--map-muted); flex: 0 0 auto; transition: transform .2s ease; }
+.section-toggle[aria-expanded='false'] > svg { transform: rotate(-90deg); }
+.section-toggle .section-heading { margin-bottom: 11px; }
+.search-results { border-top: 1px solid var(--map-line); margin-top: 20px; }
+.search-result { align-items: center; background: transparent; border-bottom: 1px solid var(--map-line); color: var(--map-ink); display: flex; gap: 10px; padding: 13px 2px; text-align: left; width: 100%; }
+.search-result:hover, .search-result:focus-visible { background: var(--map-surface-soft); }
+.search-result-copy { display: grid; gap: 4px; min-width: 0; }
+.search-result-copy strong { font-family: Georgia, ui-serif, serif; font-size: 17px; font-weight: 500; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-copy small { color: var(--map-muted); font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.search-result-count { color: var(--map-muted); font-size: 11px; margin-left: auto; }
+.search-result > svg { color: var(--map-muted); flex: 0 0 auto; }
+.location-result { border-top: 1px solid var(--map-line); margin-top: 20px; }
+.result-heading { align-items: center; display: flex; gap: 10px; padding: 14px 0 12px; }
+.result-heading h2 { font-family: Georgia, ui-serif, serif; font-size: 22px; font-weight: 500; line-height: 1.15; margin: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.result-heading small { color: var(--map-muted); display: block; font-size: 10px; margin-top: 4px; }
+.result-heading > span { color: var(--map-muted); font-size: 12px; margin-left: auto; }
+.result-back { align-items: center; background: transparent; color: var(--map-muted); display: inline-flex; flex: 0 0 auto; justify-content: center; padding: 4px; }
+.result-back:hover { color: var(--map-ink); }
+.result-grid { display: grid; gap: 3px; grid-template-columns: repeat(2, minmax(0, 1fr)); }
+.result-photo { aspect-ratio: 1; background: var(--map-surface-soft); display: block; overflow: hidden; padding: 0; }
+.result-photo img { display: block; height: 100%; object-fit: cover; transition: opacity .2s ease, transform .3s ease; width: 100%; }
+.result-photo:hover img, .result-photo:focus-visible img { opacity: .82; transform: scale(1.03); }
+.result-photo:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: -2px; }
 .place-rail { -webkit-overflow-scrolling: touch; cursor: grab; display: flex; gap: 16px; margin-right: -16px; overflow-x: auto; overscroll-behavior-x: contain; padding: 0 16px 12px 0; scroll-snap-type: x mandatory; scrollbar-width: none; touch-action: pan-x; user-select: none; }
 .place-rail:active { cursor: grabbing; }
 .place-rail::-webkit-scrollbar { display: none; }

@@ -5,13 +5,13 @@ import { LocateFixed, Minus, Plus } from 'lucide-vue-next';
 import DiscoverCircleResults from './DiscoverCircleResults.vue';
 import DiscoverPlacePanel from './DiscoverPlacePanel.vue';
 import type { GalleryPhoto } from '../stores/gallery';
-import { groupForAddressParts, groupPhotosByRegion, photosInCircle, slugForLocation, toAMapCoordinates, type ContainerPoint, type DiscoverLocation } from '../lib/discover-map-data';
+import { groupForAddressParts, groupPhotosByRegion, photosInCircle, toAMapCoordinates, type ContainerPoint, type DiscoverLocation } from '../lib/discover-map-data';
 import { useLocale } from '../i18n';
 import { mapStyleForTheme, useTheme } from '../theme';
 import { useDiscoverCircleSelectionStore } from '../stores/discover-circle-selection';
 
 type AMapPoint = { lnglat: [number, number]; extData: { location: DiscoverLocation } };
-type ClusterContext = { marker: AMap.Marker; count: number; clusterData?: unknown[] };
+type ClusterContext = { marker: AMap.Marker; count: number };
 type MarkerContext = { marker: AMap.Marker };
 type MarkerClusterInstance = { setMap: (map: AMap.Map | null) => void };
 type MapInteractionEvent = { pixel?: AMap.Pixel; lnglat?: AMap.LngLat; target?: unknown };
@@ -28,12 +28,10 @@ type AMapRuntime = typeof AMap & {
 const props = withDefaults(defineProps<{
   locations: DiscoverLocation[];
   unlocatedPhotos: GalleryPhoto[];
-  selectedId?: string | null;
   locationError?: string | null;
-}>(), { selectedId: null, locationError: null });
+}>(), { locationError: null });
 
 const emit = defineEmits<{
-  (event: 'select-location', location: DiscoverLocation): void;
   (event: 'select-photo', photo: GalleryPhoto): void;
   (event: 'clear-location'): void;
 }>();
@@ -160,6 +158,16 @@ function mapClick(event: MapInteractionEvent): void {
   emit('clear-location');
 }
 
+function selectCircleAtMarker(marker: AMap.Marker): void {
+  const point = containerPointFromEvent({ lnglat: marker.getPosition() });
+  if (!point) return;
+  circlePoint.value = point;
+  circleLocked.value = true;
+  circleVisible.value = true;
+  selectPhotosInCircle();
+  emit('clear-location');
+}
+
 function handleEscape(event: KeyboardEvent): void {
   if (event.key !== 'Escape' || !circleLocked.value) return;
   clearCircleSelection();
@@ -169,74 +177,6 @@ function handleEscape(event: KeyboardEvent): void {
 function updatePointerCapability(event: MediaQueryListEvent): void {
   pointerCircleEnabled.value = event.matches;
   if (!event.matches) clearCircleSelection();
-}
-
-function locationForMarker(marker: AMap.Marker): DiscoverLocation | undefined {
-  const extData = marker.getExtData() as { location?: DiscoverLocation } | {};
-  if ('location' in extData && extData.location) return extData.location;
-  const position = marker.getPosition();
-  if (!position) return undefined;
-  const [longitude, latitude] = [position.getLng(), position.getLat()];
-  return props.locations.find((location) => {
-    const [targetLongitude, targetLatitude] = toAMapCoordinates(location.coordinates);
-    return Math.abs(targetLongitude - longitude) < 0.00001 && Math.abs(targetLatitude - latitude) < 0.00001;
-  });
-}
-
-function locationFromClusterPoint(value: unknown): DiscoverLocation | undefined {
-  if (!value || typeof value !== 'object') return undefined;
-  const point = value as { extData?: unknown; location?: DiscoverLocation };
-  if (point.location) return point.location;
-  if (!point.extData || typeof point.extData !== 'object') return undefined;
-  const extData = point.extData as { location?: DiscoverLocation };
-  return extData.location;
-}
-
-function locationsForCluster(context: ClusterContext): DiscoverLocation[] {
-  const clusterData = Array.isArray(context.clusterData) ? context.clusterData : [];
-  const fromData = clusterData.map(locationFromClusterPoint).filter((location): location is DiscoverLocation => Boolean(location));
-  const uniqueFromData = [...new Map(fromData.map((location) => [location.id, location])).values()];
-  // AMap provides the exact source points for this visible cluster.
-  return context.count > 0 ? uniqueFromData.slice(0, context.count) : uniqueFromData;
-}
-
-function mergedLocation(locations: DiscoverLocation[]): DiscoverLocation | undefined {
-  const uniqueLocations = [...new Map(locations.map((location) => [location.id, location])).values()];
-  const first = uniqueLocations[0];
-  if (!first) return undefined;
-  if (uniqueLocations.length === 1) return first;
-  const photos = [...new Map(uniqueLocations.flatMap((location) => location.photos).map((photo) => [photo.id, photo])).values()];
-  const id = `cluster-${uniqueLocations.map((location) => location.id).sort().join('-')}`;
-  return {
-    id,
-    slug: slugForLocation(id),
-    name: t('discover.clusterTitle', { count: uniqueLocations.length }),
-    coordinates: first.coordinates,
-    photoIds: photos.map((photo) => photo.id),
-    photos,
-    coverPhoto: photos[0],
-    group: first.group,
-  };
-}
-
-function markerElement(location: DiscoverLocation): HTMLDivElement {
-  const content = document.createElement('div');
-  content.className = `amap-photo-marker${props.selectedId === location.id ? ' active' : ''}`;
-  content.setAttribute('role', 'button');
-  content.setAttribute('tabindex', '0');
-  content.setAttribute('aria-label', t('discover.locationMarker', { name: location.name, count: t('discover.photoCount', { count: location.photos.length }) }));
-  content.innerHTML = '<span class="amap-marker-halo"></span><span class="amap-marker-dot"></span>';
-  content.addEventListener('click', (event) => {
-    event.stopPropagation();
-    suppressMapClickUntil = Date.now() + 80;
-    selectLocation(location, false);
-  });
-  content.addEventListener('keydown', (event) => {
-    if (event.key !== 'Enter' && event.key !== ' ') return;
-    event.preventDefault();
-    selectLocation(location, false);
-  });
-  return content;
 }
 
 function renderClusters(): void {
@@ -261,37 +201,31 @@ function renderClusters(): void {
       content.style.width = `${size}px`;
       content.style.height = `${size}px`;
       content.style.lineHeight = `${size}px`;
-      const openClusterDetails = (event: Event) => {
+      const selectClusterCircle = (event: Event) => {
         event.stopPropagation();
         suppressMapClickUntil = Date.now() + 80;
-        const location = mergedLocation(locationsForCluster(context));
-        if (location) selectLocation(location, false);
+        selectCircleAtMarker(context.marker);
       };
       content.addEventListener('click', (event) => {
-        openClusterDetails(event);
+        selectClusterCircle(event);
       });
       content.addEventListener('keydown', (event) => {
         if (event.key !== 'Enter' && event.key !== ' ') return;
         event.preventDefault();
-        openClusterDetails(event);
+        selectClusterCircle(event);
       });
       context.marker.setContent(content);
       context.marker.setOffset(new currentAMap.Pixel(-size / 2, -size / 2));
     },
     renderMarker: (context) => {
-      const location = locationForMarker(context.marker);
-      if (!location) return;
-      context.marker.setContent(markerElement(location));
-      context.marker.setOffset(new currentAMap.Pixel(-10, -10));
+      // Single locations stay on the map data set for circle selection, but have no visible marker.
+      const content = document.createElement('span');
+      content.setAttribute('aria-hidden', 'true');
+      content.style.display = 'none';
+      content.style.pointerEvents = 'none';
+      context.marker.setContent(content);
     },
   });
-}
-
-function selectLocation(location: DiscoverLocation, zoomMap = true): void {
-  clearCircleSelection();
-  const currentMap = map.value;
-  if (zoomMap && currentMap) currentMap.setZoomAndCenter(Math.max(currentMap.getZoom(), 8), toAMapCoordinates(location.coordinates));
-  emit('select-location', location);
 }
 
 function setZoom(next: number): void {
@@ -365,7 +299,6 @@ async function initMap(): Promise<void> {
 }
 
 watch(() => props.locations, () => { renderClusters(); if (circleLocked.value && circleVisible.value) selectPhotosInCircle(); }, { deep: true });
-watch(() => props.selectedId, renderClusters);
 watch(theme, applyMapTheme);
 onActivated(resizeRetainedMap);
 onMounted(() => {
@@ -401,7 +334,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <DiscoverCircleResults v-if="circleSelectionActive" :sections="circleSections" :count="circlePhotos.length" @clear="clearCircleSelection(); emit('clear-location')" @select-photo="emit('select-photo', $event)" />
-    <DiscoverPlacePanel v-else :locations="locations" :unlocated-photos="unlocatedPhotos" :selected-id="selectedId" :location-error="locationError" @select-location="selectLocation" @select-photo="emit('select-photo', $event)" />
+    <DiscoverPlacePanel v-else :locations="locations" :unlocated-photos="unlocatedPhotos" :location-error="locationError" @select-photo="emit('select-photo', $event)" />
     <div class="map-attribution">{{ t('discover.attribution') }}</div>
   </section>
 </template>
@@ -422,13 +355,7 @@ onBeforeUnmount(() => {
 .zoom-readout { background: var(--map-control); color: var(--map-muted); font-size: 9px; padding: 4px 0; text-align: center; }
 .map-attribution { bottom: 9px; color: var(--map-muted); font-size: 10px; position: absolute; right: 14px; z-index: 5; }
 :deep(.amap-logo), :deep(.amap-copyright) { display: none !important; visibility: hidden !important; }
-:deep(.amap-photo-marker), :deep(.amap-cluster-marker) { align-items: center; border: 0; cursor: pointer; display: flex; justify-content: center; outline: none; position: relative; }
-:deep(.amap-photo-marker) { height: 20px; width: 20px; }
-:deep(.amap-marker-halo) { background: var(--map-marker-halo); border: 1px solid color-mix(in srgb, var(--map-marker) 46%, transparent); border-radius: 50%; height: 20px; position: absolute; width: 20px; }
-:deep(.amap-marker-dot) { background: var(--map-marker); border: 1px solid color-mix(in srgb, var(--map-ink) 80%, transparent); border-radius: 50%; box-shadow: 0 1px 5px color-mix(in srgb, var(--map-ink) 46%, transparent); height: 7px; position: absolute; width: 7px; }
-:deep(.amap-photo-marker.active .amap-marker-halo), :deep(.amap-photo-marker:hover .amap-marker-halo), :deep(.amap-photo-marker:focus-visible .amap-marker-halo) { background: var(--map-marker-halo-active); border-color: var(--map-marker); height: 24px; width: 24px; }
-:deep(.amap-photo-marker.active .amap-marker-dot), :deep(.amap-photo-marker:hover .amap-marker-dot), :deep(.amap-photo-marker:focus-visible .amap-marker-dot) { background: var(--map-ink); height: 9px; width: 9px; }
-:deep(.amap-cluster-marker) { background: var(--map-cluster); border: 1px solid color-mix(in srgb, var(--map-marker) 35%, var(--map-ink)); border-radius: 50%; box-shadow: 0 2px 10px color-mix(in srgb, var(--map-ink) 48%, transparent); color: var(--map-cluster-ink); font-size: 11px; font-weight: 700; }
+:deep(.amap-cluster-marker) { align-items: center; background: var(--map-cluster); border: 1px solid color-mix(in srgb, var(--map-marker) 35%, var(--map-ink)); border-radius: 50%; box-shadow: 0 2px 10px color-mix(in srgb, var(--map-ink) 48%, transparent); color: var(--map-cluster-ink); cursor: pointer; display: flex; font-size: 11px; font-weight: 700; justify-content: center; outline: none; position: relative; }
 @media (max-width: 680px) {
   .discover-map { min-height: 100svh; }
   .map-controls { right: 12px; top: 106px; }
