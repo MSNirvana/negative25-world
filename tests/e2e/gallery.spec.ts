@@ -36,6 +36,36 @@ test('gallery opens a photo detail view', async ({ page }) => {
   await expect(page.getByRole('dialog', { name: 'Alpine light' })).toBeVisible();
 });
 
+test('browser back restores the gallery scroll position after viewing a photo', async ({ page }) => {
+  const photos = Array.from({ length: 18 }, (_, index) => ({
+    id: `scroll-${index}`,
+    spaceSlug: 'primary',
+    title: `Scroll frame ${index}`,
+    description: '',
+    capturedAt: '2025-10-12T03:04:05.000Z',
+    rating: 5,
+    aspectRatio: index % 2 ? 0.8 : 1.5,
+    thumbnail: { kind: 'thumbnail', url: `https://example.com/scroll-${index}.jpg`, width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  }));
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos, pagination: { nextCursor: null, hasMore: false } }) });
+  });
+  await page.goto('/');
+  const target = page.getByRole('button', { name: 'Open Scroll frame 12' });
+  await target.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(0);
+  await target.click();
+  await expect(page.getByRole('dialog', { name: 'Scroll frame 12' })).toBeVisible();
+  await page.goBack();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: 'Open Scroll frame 12' })).toBeVisible();
+  await expect.poll(() => page.evaluate((initial) => Math.abs(window.scrollY - initial), before)).toBeLessThanOrEqual(8);
+});
+
 test('negative25 branding and canonical metadata are present', async ({ page }) => {
   await page.goto('/');
   await expect(page).toHaveTitle('N25');

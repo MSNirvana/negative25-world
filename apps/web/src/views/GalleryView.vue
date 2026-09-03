@@ -13,6 +13,8 @@ import { useWorkspaceStore } from '../stores/workspace';
 import { usePublicViewerStore } from '../stores/public-viewer';
 import type { AlbumDetail } from '@negative25/contracts';
 
+defineOptions({ name: 'GalleryView' });
+
 const route = useRoute();
 const router = useRouter();
 const gallery = useGalleryStore();

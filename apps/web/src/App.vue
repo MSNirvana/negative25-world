@@ -3,7 +3,7 @@
     <AppHeader v-if="!isPhoto && !isAdmin" />
     <ViewSelector v-if="isPublic" class="global-view-selector" :class="{ 'is-scrolled': scrolled, 'is-discover': isDiscover }" :active="isDiscover ? 'discover' : 'gallery'" @select="selectView" />
     <RouterView v-slot="{ Component }">
-      <KeepAlive include="DiscoverView">
+      <KeepAlive include="DiscoverView,GalleryView">
         <component :is="Component" />
       </KeepAlive>
     </RouterView>

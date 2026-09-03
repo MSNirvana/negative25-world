@@ -24,6 +24,13 @@ function requireAdminSession(to: { fullPath: string }): true | { name: string; q
 
 export const router = createRouter({
   history: createWebHistory(),
+  scrollBehavior(to, from, savedPosition) {
+    if (savedPosition) return savedPosition;
+    // The photo viewer is fixed over the gallery. Keep the underlying page at
+    // its current offset for both explicit close and browser-history returns.
+    if (to.path.startsWith('/photo/') || from.path.startsWith('/photo/')) return false;
+    return undefined;
+  },
   routes: [
     { path: '/', name: 'gallery', component: GalleryView },
     { path: '/discover', name: 'discover', component: DiscoverView },
