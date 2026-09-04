@@ -3,6 +3,12 @@ import { createPinia, setActivePinia } from 'pinia';
 import { sortGalleryPhotosForMode, toGalleryPhoto, useGalleryStore } from './gallery.js';
 import { setLocale } from '../i18n';
 
+vi.mock('../api/client', () => ({
+  fetchGallery: vi.fn(),
+  fetchPhoto: vi.fn(),
+  isApiConfigured: () => false,
+}));
+
 describe('gallery store', () => {
   beforeEach(() => setActivePinia(createPinia()));
 

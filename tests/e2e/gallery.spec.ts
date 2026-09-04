@@ -74,6 +74,34 @@ test('negative25 branding and canonical metadata are present', async ({ page }) 
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /negative25/);
 });
 
+test('does not render demo photos while the API gallery is pending', async ({ page }) => {
+  let release!: () => void;
+  const pending = new Promise<void>((resolve) => { release = resolve; });
+  const photo = {
+    id: 'api-frame',
+    spaceSlug: 'primary',
+    title: 'API frame',
+    description: '',
+    capturedAt: '2026-01-02T03:04:05.000Z',
+    rating: 7,
+    aspectRatio: 1.5,
+    thumbnail: { kind: 'thumbnail', url: 'https://example.com/api-frame.jpg', width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  };
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    await pending;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: [photo], pagination: { nextCursor: null, hasMore: false } }) });
+  });
+
+  await page.goto('/');
+  await expect(page.locator('.loading')).toBeVisible();
+  await expect(page.locator('.photo-card')).toHaveCount(0);
+  release();
+  await expect(page.getByRole('button', { name: 'Open API frame' })).toBeVisible();
+});
+
 test('returning from the personal center reloads the cached gallery', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('negative25.session', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh', expiresIn: 3600 })));
   const photo = {

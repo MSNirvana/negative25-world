@@ -41,6 +41,12 @@ describe('gallery loading', () => {
     isApiConfiguredMock.mockReturnValue(true);
   });
 
+  it('does not seed demo photos when the API is configured', () => {
+    const gallery = useGalleryStore();
+
+    expect(gallery.photos).toEqual([]);
+  });
+
   it('retries a transient empty featured response before clearing the gallery', async () => {
     fetchGalleryMock.mockResolvedValueOnce(response()).mockResolvedValueOnce(response(photo('featured-photo')));
 

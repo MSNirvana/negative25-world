@@ -45,7 +45,9 @@ const demoPhotos: GalleryPhoto[] = [
 export const useGalleryStore = defineStore('gallery', () => {
   const mode = ref<GalleryMode>('featured');
   const selectedLocation = ref<string | null>(null);
-  const photos = ref<GalleryPhoto[]>(demoPhotos);
+  // Demo photos are only a fallback for an unconfigured local API. In API
+  // mode, start empty so stale test imagery cannot flash before the request.
+  const photos = ref<GalleryPhoto[]>(isApiConfigured() ? [] : demoPhotos);
   const locationPhotos = ref<GalleryPhoto[]>(isApiConfigured() ? [] : demoPhotos);
   const loading = ref(false);
   const error = ref<string | null>(null);
