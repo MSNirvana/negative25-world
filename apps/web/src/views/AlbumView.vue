@@ -33,7 +33,7 @@ async function load(): Promise<void> {
     album.value = await fetchAlbum(spaceSlug, albumId.value);
   } catch (cause) { error.value = cause instanceof Error ? cause.message : t('album.error'); } finally { loading.value = false; }
 }
-function open(photo: GalleryPhoto): void { gallery.openPhoto(photo); void router.push({ path: `/photo/${photo.id}`, query: route.query }); }
+function open(photo: GalleryPhoto): void { gallery.openPhoto(photo); void router.push({ path: `/photo/${photo.id}`, query: { ...route.query, space: gallery.spaceSlug } }); }
 onMounted(load);
 watch(albumId, load);
 </script>

@@ -6,12 +6,16 @@ import { useGalleryStore } from '../stores/gallery';
 import { useLocale } from '../i18n';
 import { photoReturnTarget } from '../lib/photo-return';
 import { usePublicViewerStore } from '../stores/public-viewer';
+import { useSessionStore } from '../stores/session';
+import { useWorkspaceStore } from '../stores/workspace';
 
 const props = defineProps<{ id: string }>();
 const router = useRouter();
 const route = useRoute();
 const gallery = useGalleryStore();
 const publicViewer = usePublicViewerStore();
+const session = useSessionStore();
+const workspace = useWorkspaceStore();
 const { t } = useLocale();
 const photo = computed(() => gallery.photos.find((item) => item.id === props.id) ?? null);
 const previous = computed(() => { if (!photo.value) return null; const index = gallery.visiblePhotos.findIndex((item) => item.id === photo.value?.id); return index > 0 ? gallery.visiblePhotos[index - 1] : null; });
@@ -19,17 +23,42 @@ const next = computed(() => { if (!photo.value) return null; const index = galle
 onMounted(async () => {
   const username = typeof route.query.user === 'string' ? route.query.user : null;
   const profile = username ? await publicViewer.load(username) : null;
+  const requestedSpace = typeof route.query.space === 'string' && route.query.space.trim()
+    ? route.query.space.trim()
+    : null;
+  // Public profile context is authoritative. For direct links without a
+  // profile, use the workspace carried by the link instead of falling back to
+  // primary, which would make personal-archive photos look missing on reload.
   if (profile?.workspaceSlug) gallery.setContext(profile.workspaceSlug, null);
+  else if (requestedSpace) {
+    // Only send an authenticated request for a workspace the current account
+    // actually belongs to. Public links opened while signed in must remain
+    // readable instead of being rejected by another workspace's ACL.
+    let token: string | null = null;
+    if (requestedSpace !== 'primary' && session.accessToken) {
+      await workspace.load(session.accessToken);
+      if (workspace.spaces.some((item) => item.slug === requestedSpace)) token = session.accessToken;
+    }
+    gallery.setContext(requestedSpace, token);
+  }
   if (!photo.value) void gallery.loadPhoto(props.id);
 });
 function close(): void {
   const returnTo = photoReturnTarget(route.query.returnTo);
   if (returnTo) { void router.replace(returnTo); return; }
-  void router.push({ path: '/', query: { mode: gallery.mode, ...(route.query.user ? { user: route.query.user } : {}) } });
+  void router.push({ path: '/', query: {
+    mode: gallery.mode,
+    ...(route.query.user ? { user: route.query.user } : {}),
+    ...(route.query.space ? { space: String(route.query.space) } : {}),
+  } });
 }
 function photoQuery(): { returnTo?: string } {
   const returnTo = photoReturnTarget(route.query.returnTo);
-  return { ...(route.query.user ? { user: String(route.query.user) } : {}), ...(returnTo ? { returnTo } : {}) };
+  return {
+    ...(route.query.user ? { user: String(route.query.user) } : {}),
+    ...(route.query.space ? { space: String(route.query.space) } : {}),
+    ...(returnTo ? { returnTo } : {}),
+  };
 }
 function goPrevious(): void { if (previous.value) void router.replace({ name: 'photo', params: { id: previous.value.id }, query: photoQuery() }); }
 function goNext(): void { if (next.value) void router.replace({ name: 'photo', params: { id: next.value.id }, query: photoQuery() }); }

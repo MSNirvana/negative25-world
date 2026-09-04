@@ -33,7 +33,31 @@ test('gallery opens a photo detail view', async ({ page }) => {
   await page.goto('http://127.0.0.1:5173/');
   await expect(page.getByRole('heading', { name: 'Featured work' })).toBeVisible();
   await page.getByRole('button', { name: 'Open Alpine light' }).click();
+  await expect(page).toHaveURL(/\/photo\/44444444-4444-4444-8444-444444444444\?space=primary$/);
   await expect(page.getByRole('dialog', { name: 'Alpine light' })).toBeVisible();
+});
+
+test('photo detail reloads from the workspace carried by its URL', async ({ page }) => {
+  const photo = {
+    id: 'personal-photo',
+    spaceSlug: 'u-personal-archive',
+    title: 'Personal archive frame',
+    description: 'A frame from a personal archive',
+    capturedAt: '2026-01-02T03:04:05.000Z',
+    rating: 7,
+    aspectRatio: 1.5,
+    thumbnail: { kind: 'thumbnail', url: 'https://example.com/personal.jpg', width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  };
+  await page.route('**/api/v1/spaces/u-personal-archive/photos/personal-photo', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(photo) });
+  });
+  await page.goto('/photo/personal-photo?space=u-personal-archive');
+  await expect(page.getByRole('dialog', { name: 'Personal archive frame' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close photo' }).click();
+  await expect(page).toHaveURL(/\/?mode=featured&space=u-personal-archive$/);
 });
 
 test('browser back restores the gallery scroll position after viewing a photo', async ({ page }) => {

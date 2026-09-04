@@ -297,7 +297,10 @@ async function initMap(): Promise<void> {
   }
 }
 
-watch(() => props.locations, () => { renderClusters(); if (circleLocked.value && circleVisible.value) selectPhotosInCircle(); }, { deep: true });
+// Keep a locked circle result stable while the gallery/location catalog is
+// refreshing. A transient empty catalog must not erase the user's selection;
+// only an explicit new selection or clear action may replace it.
+watch(() => props.locations, () => { renderClusters(); }, { deep: true });
 watch(theme, applyMapTheme);
 onActivated(resizeRetainedMap);
 onMounted(() => {

@@ -46,6 +46,9 @@ async function syncGalleryContext(): Promise<void> {
   await session.loadUser();
   if (requestId !== contextRequestId) return;
   const viewingUsername = typeof route.query.user === 'string' ? route.query.user : null;
+  const requestedSpace = typeof route.query.space === 'string' && route.query.space.trim()
+    ? route.query.space.trim()
+    : null;
   if (viewingUsername) {
     const profile = await publicViewer.load(viewingUsername);
     if (requestId !== contextRequestId) return;
@@ -54,6 +57,17 @@ async function syncGalleryContext(): Promise<void> {
     return;
   }
   publicViewer.clear();
+  if (requestedSpace) {
+    let token: string | null = null;
+    if (requestedSpace !== 'primary' && session.accessToken) {
+      await workspace.load(session.accessToken);
+      if (requestId !== contextRequestId) return;
+      if (workspace.spaces.some((item) => item.slug === requestedSpace)) token = session.accessToken;
+    }
+    gallery.setContext(requestedSpace, token);
+    markContextReady();
+    return;
+  }
   if (session.authenticated) {
     await workspace.load(session.accessToken);
     if (requestId !== contextRequestId) return;
@@ -93,8 +107,11 @@ watch(() => [gallery.mode, gallery.selectedLocation, contextReady.value, gallery
   void gallery.load(mode as GalleryMode);
 }, { immediate: true });
 watch(() => workspace.slug, () => { if (contextReady.value && session.authenticated) { gallery.setContext(workspace.slug, session.accessToken); void gallery.loadLocationCatalog(); void gallery.load(gallery.mode); } });
-watch(() => [session.authenticated, route.query.user], () => { void syncGalleryContext(); });
-function open(photo: Parameters<typeof gallery.openPhoto>[0]): void { gallery.openPhoto(photo); void router.push({ path: `/photo/${photo.id}`, query: route.query }); }
+watch(() => [session.authenticated, route.query.user, route.query.space], () => { void syncGalleryContext(); });
+function open(photo: Parameters<typeof gallery.openPhoto>[0]): void {
+  gallery.openPhoto(photo);
+  void router.push({ path: `/photo/${photo.id}`, query: { ...route.query, space: gallery.spaceSlug } });
+}
 function loadMore(): void { if (!gallery.nextCursor || gallery.loading) return; void gallery.load(gallery.mode, true); }
 function openAlbumPhoto(photo: Parameters<typeof gallery.openPhoto>[0]): void { open(photo); }
 function observeSentinel(): void {
