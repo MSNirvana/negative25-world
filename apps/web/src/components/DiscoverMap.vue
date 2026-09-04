@@ -25,11 +25,10 @@ type AMapRuntime = typeof AMap & {
   }) => MarkerClusterInstance;
 };
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   locations: DiscoverLocation[];
   unlocatedPhotos: GalleryPhoto[];
-  locationError?: string | null;
-}>(), { locationError: null });
+}>();
 
 const emit = defineEmits<{
   (event: 'select-photo', photo: GalleryPhoto): void;
@@ -334,7 +333,7 @@ onBeforeUnmount(() => {
       </div>
     </div>
     <DiscoverCircleResults v-if="circleSelectionActive" :sections="circleSections" :count="circlePhotos.length" @clear="clearCircleSelection(); emit('clear-location')" @select-photo="emit('select-photo', $event)" />
-    <DiscoverPlacePanel v-else :locations="locations" :unlocated-photos="unlocatedPhotos" :location-error="locationError" @select-photo="emit('select-photo', $event)" />
+    <DiscoverPlacePanel v-else :locations="locations" :unlocated-photos="unlocatedPhotos" @select-photo="emit('select-photo', $event)" />
     <div class="map-attribution">{{ t('discover.attribution') }}</div>
   </section>
 </template>

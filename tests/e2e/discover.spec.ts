@@ -1,4 +1,16 @@
-import { test, expect } from '@playwright/test';
+import { test, expect, type Page } from '@playwright/test';
+
+const fallbackPhotos = [
+  { id: 'alpine-light', spaceSlug: 'primary', title: 'Alpine light', description: 'Quiet light across the high country', capturedAt: '2025-10-12T03:04:05.000Z', rating: 6, aspectRatio: 1.5, thumbnail: { kind: 'thumbnail', url: 'https://example.com/alpine.jpg', width: 900, height: 600, format: 'jpeg' }, media: [], location: null, metadata: {} },
+  { id: 'after-rain', spaceSlug: 'primary', title: 'After rain', description: 'A short pause on the forest trail', capturedAt: '2025-09-08T03:04:05.000Z', rating: 5, aspectRatio: 0.78, thumbnail: { kind: 'thumbnail', url: 'https://example.com/rain.jpg', width: 600, height: 770, format: 'jpeg' }, media: [], location: null, metadata: {} },
+];
+
+async function mockFallbackPhotos(page: Page): Promise<void> {
+  await page.route('**/api/v1/**', (route) => route.abort());
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: fallbackPhotos, pagination: { nextCursor: null, hasMore: false } }) });
+  });
+}
 
 test.beforeEach(async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('negative25.locale', 'en'));
@@ -72,6 +84,13 @@ test('discover renders the AMap world map shell and data-aware panel', async ({ 
   await expect(page.locator('.amap-copyright')).toBeHidden();
   await expect(page.getByRole('searchbox', { name: 'Search places' })).toBeVisible();
   await expect(page.getByRole('heading', { name: 'Unlocated photos' })).toBeVisible();
+  await expect(page.locator('.panel-notice')).toHaveCount(0);
+  await expect(page.getByText('Asia explored')).toHaveCount(0);
+  await expect(page.locator('.panel-scroll')).toHaveCSS('overflow-y', 'auto');
+
+  const search = page.getByRole('searchbox', { name: 'Search places' });
+  await search.fill('Alpine');
+  await expect(page.locator('.clear-search')).toHaveCount(1);
 });
 
 test('discover map surfaces follow the selected visual theme', async ({ page }) => {
@@ -104,7 +123,7 @@ test('discover map controls remain usable and restore the world view', async ({ 
 });
 
 test('discover search filters unlocated photographs and opens the shared photo route', async ({ page }) => {
-  await page.route('**/api/v1/**', (route) => route.abort());
+  await mockFallbackPhotos(page);
   await page.goto('/discover');
   const search = page.getByRole('searchbox', { name: 'Search places' });
   await search.fill('Alpine');
@@ -115,7 +134,7 @@ test('discover search filters unlocated photographs and opens the shared photo r
 });
 
 test('discover photo return keeps the live map instance', async ({ page }) => {
-  await page.route('**/api/v1/**', (route) => route.abort());
+  await mockFallbackPhotos(page);
   await page.goto('/discover');
   const map = page.locator('.amap-container');
   await expect(map).toBeVisible();

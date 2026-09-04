@@ -17,7 +17,6 @@ const router = useRouter();
 const gallery = useGalleryStore();
 const publicViewer = usePublicViewerStore();
 const locationRecords = ref<DiscoverLocationRecord[]>([]);
-const locationError = ref<string | null>(null);
 let locationRequest: AbortController | null = null;
 let refreshSequence = 0;
 const { t } = useLocale();
@@ -34,7 +33,6 @@ async function refreshDiscoverData(): Promise<void> {
   locationRequest?.abort();
   const controller = new AbortController();
   locationRequest = controller;
-  locationError.value = null;
 
   const username = typeof route.query.user === 'string' ? route.query.user : null;
   const profile = await publicViewer.load(username);
@@ -54,9 +52,9 @@ async function refreshDiscoverData(): Promise<void> {
     const records = await fetchDiscoverLocations(undefined, controller.signal, nextSpaceSlug);
     if (controller.signal.aborted || requestId !== refreshSequence || gallery.spaceSlug !== nextSpaceSlug) return;
     locationRecords.value = records;
-  } catch (cause: unknown) {
+  } catch {
     if (controller.signal.aborted || requestId !== refreshSequence) return;
-    locationError.value = cause instanceof Error ? cause.message : t('discover.locationUnavailable');
+    // Keep photo-derived locations visible when the optional location service fails.
   }
 }
 
@@ -79,7 +77,7 @@ onBeforeUnmount(() => {
 
 <template>
   <main class="discover">
-    <DiscoverMap :locations="locations" :unlocated-photos="unlocatedPhotos" :location-error="locationError" @select-photo="openPhoto" />
+    <DiscoverMap :locations="locations" :unlocated-photos="unlocatedPhotos" @select-photo="openPhoto" />
   </main>
 </template>
 

@@ -5,11 +5,10 @@ import type { GalleryPhoto } from '../stores/gallery';
 import { DISCOVER_GROUPS, filterLocations, type DiscoverGroupId, type DiscoverLocation } from '../lib/discover-map-data';
 import { useLocale } from '../i18n';
 
-const props = withDefaults(defineProps<{
+const props = defineProps<{
   locations: DiscoverLocation[];
   unlocatedPhotos: GalleryPhoto[];
-  locationError?: string | null;
-}>(), { locationError: null });
+}>();
 
 const emit = defineEmits<{
   (event: 'select-photo', photo: GalleryPhoto): void;
@@ -41,7 +40,11 @@ function locationsForGroup(group: DiscoverGroupId): DiscoverLocation[] {
   if (group === 'recent') return [...locations].sort((a, b) => latestPhotoTime(b) - latestPhotoTime(a)).slice(0, 10);
   return locations.filter((location) => location.group === group);
 }
-function groupLabel(group: DiscoverGroupId): string { return group === 'unlocated' ? t('discover.unlocated') : t(`discover.group.${group}`); }
+function groupLabel(group: DiscoverGroupId): string {
+  if (group === 'unlocated') return t('discover.unlocated');
+  if (group === 'asia') return '';
+  return t(`discover.group.${group}`);
+}
 
 function latestPhotoTime(location: DiscoverLocation): number {
   return location.photos.reduce((latest, photo) => Math.max(latest, Date.parse(photo.capturedAt) || 0), 0);
@@ -92,14 +95,12 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
         <strong>{{ t('discover.mappedCount', { count: mappedCount }) }}</strong>
       </div>
 
-      <p v-if="locationError" class="panel-notice" role="status">{{ t('discover.locationUnavailable') }}</p>
-
       <section v-if="selectedLocation" class="location-result" :aria-label="selectedLocation.name">
         <header class="result-heading">
           <button class="result-back" type="button" :aria-label="t('discover.backToSearch')" @click="backToSearch"><ArrowLeft :size="16" /></button>
           <div>
             <h2>{{ selectedLocation.name }}</h2>
-            <small>{{ groupLabel(selectedLocation.group) }}</small>
+            <small v-if="groupLabel(selectedLocation.group)">{{ groupLabel(selectedLocation.group) }}</small>
           </div>
           <span>{{ selectedLocation.photos.length }}</span>
         </header>
@@ -113,7 +114,7 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
 
       <section v-else-if="hasSearch" class="search-results" :aria-label="t('discover.searchLabel')">
         <button v-for="location in searchResults" :key="location.id" class="search-result" type="button" @click="selectLocation(location)">
-          <span class="search-result-copy"><strong>{{ location.name }}</strong><small>{{ groupLabel(location.group) }}</small></span>
+          <span class="search-result-copy"><strong>{{ location.name }}</strong><small v-if="groupLabel(location.group)">{{ groupLabel(location.group) }}</small></span>
           <span class="search-result-count">{{ location.photos.length }}</span>
           <ChevronRight :size="16" aria-hidden="true" />
         </button>
@@ -193,14 +194,15 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
 .panel-toggle { align-items: center; background: transparent; color: var(--map-muted); display: flex; height: 34px; justify-content: center; padding: 0; position: absolute; right: 0; top: 0; width: 100%; z-index: 2; }
 .panel-toggle svg { transition: transform .24s ease; }
 .place-panel:not(.expanded) .panel-toggle svg { transform: rotate(180deg); }
-.panel-scroll { height: 100%; overflow: auto hidden; padding: 34px 16px 40px; scrollbar-width: thin; }
+.panel-scroll { height: 100%; overflow-x: hidden; overflow-y: auto; padding: 34px 16px 40px; scrollbar-width: thin; }
 .place-search { align-items: center; border: 1px solid var(--map-line); border-radius: 999px; color: var(--map-muted); display: flex; gap: 8px; min-height: 31px; padding: 5px 11px; }
 .place-search input { background: transparent; border: 0; color: var(--map-ink); font-size: 13px; min-width: 0; outline: 0; width: 100%; }
+.place-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.place-search input::-ms-clear { display: none; }
 .place-search input::placeholder { color: var(--map-muted); }
 .clear-search { background: transparent; color: var(--map-muted); font-size: 17px; line-height: 1; padding: 0 2px; }
 .panel-meta { align-items: center; color: var(--map-muted); display: flex; font-size: 10px; justify-content: space-between; letter-spacing: .05em; margin: 13px 1px 0; text-transform: uppercase; }
 .panel-meta strong { color: var(--map-ink); font-size: 10px; font-weight: 600; letter-spacing: 0; text-transform: none; }
-.panel-notice { background: var(--map-surface-soft); border-radius: 5px; color: var(--map-muted); font-size: 11px; line-height: 1.45; margin: 13px 0 0; padding: 8px 10px; }
 .place-section { margin-top: 26px; }
 .section-heading { align-items: baseline; display: flex; gap: 9px; margin-bottom: 11px; }
 .section-heading h2 { font-family: Georgia, ui-serif, serif; font-size: 21px; font-weight: 500; line-height: 1.2; margin: 0; }

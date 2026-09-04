@@ -9,7 +9,6 @@ export type DiscoverGroup = { id: DiscoverGroupId; label: string };
 export const DISCOVER_GROUPS: DiscoverGroup[] = [
   { id: 'featured', label: '精选' },
   { id: 'recent', label: '近期更新' },
-  { id: 'asia', label: '亚洲探索' },
   { id: 'europe', label: '欧洲都市' },
   { id: 'americas', label: '美洲魅力' },
   { id: 'britain', label: '英伦风情' },
