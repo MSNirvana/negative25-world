@@ -42,18 +42,19 @@ async function submit(): Promise<void> {
 </template>
 
 <style scoped>
-.login-page > .language-switcher { position: absolute; right: 28px; top: 28px; }
-.login-page { align-items: center; display: flex; justify-content: center; min-height: calc(100vh - 72px); }
+.login-page > .language-switcher { position: absolute; right: 28px; top: max(28px, env(safe-area-inset-top)); }
+.login-page { align-items: center; display: flex; justify-content: center; min-height: calc(100vh - 72px); min-height: calc(100dvh - 72px); padding-bottom: env(safe-area-inset-bottom); }
 .login-panel { max-width: 390px; padding: 48px 0 80px; width: 100%; }
 .login-icon { align-items: center; background: var(--surface-soft); border-radius: 50%; color: var(--accent-deep); display: flex; height: 40px; justify-content: center; margin-bottom: 24px; width: 40px; }
 h1 { font-size: 43px; letter-spacing: -.045em; margin: 10px 0 7px; }
 .login-panel > p { color: var(--muted); margin: 0 0 32px; }
 form { display: grid; gap: 17px; }
 label { color: var(--muted); display: grid; font-size: 12px; gap: 7px; }
-input { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font: inherit; padding: 11px 12px; }
+input { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font: inherit; min-height: 42px; padding: 11px 12px; width: 100%; }
 input:focus { border-color: var(--accent-deep); outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
 button { align-items: center; background: var(--ink); border-radius: 4px; color: var(--paper); display: inline-flex; font-size: 13px; gap: 9px; justify-content: center; margin-top: 6px; padding: 12px 16px; }
 button:disabled { cursor: wait; opacity: .55; }
 .register-link { align-items: center; color: var(--muted); display: inline-flex; font-size: 12px; gap: 7px; justify-content: center; margin-top: 5px; padding: 8px; }.register-link:hover { color: var(--ink); }
 .form-error { color: #a34d4d; font-size: 12px; margin: 0; }
+@media (max-width: 580px) { .login-page { align-items: flex-start; padding-top: 34px; }.login-page > .language-switcher { right: 16px; top: max(16px, env(safe-area-inset-top)); }.login-panel { padding: 34px 0 calc(56px + env(safe-area-inset-bottom)); }.login-panel > p { line-height: 1.5; margin-bottom: 24px; overflow-wrap: anywhere; }h1 { font-size: 36px; }form { gap: 14px; }.register-link { min-height: 40px; } }
 </style>

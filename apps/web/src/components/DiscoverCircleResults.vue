@@ -70,5 +70,6 @@ const { t } = useLocale();
 @media (max-width: 680px) {
   .circle-results { border-radius: 15px 15px 0 0; bottom: 0; left: 0; max-height: 62svh; top: auto; width: 100%; }
   .circle-header { min-height: 62px; }
+  .circle-scroll { padding-bottom: calc(24px + env(safe-area-inset-bottom)); }
 }
 </style>

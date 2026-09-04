@@ -35,7 +35,8 @@ describe('masonry columns', () => {
   });
 
   it('selects responsive column counts', () => {
-    expect(masonryColumnCountForWidth(500)).toBe(1);
+    expect(masonryColumnCountForWidth(280)).toBe(1);
+    expect(masonryColumnCountForWidth(500)).toBe(2);
     expect(masonryColumnCountForWidth(800)).toBe(2);
     expect(masonryColumnCountForWidth(1200)).toBe(3);
     expect(masonryColumnCountForWidth(1600)).toBe(4);

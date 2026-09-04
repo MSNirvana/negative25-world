@@ -44,5 +44,5 @@ dd { color: var(--ink); font-family: Georgia, ui-serif, serif; font-size: 13px; 
 .meta-action button { align-items: center; background: transparent; color: var(--muted); display: inline-flex; height: 30px; justify-content: center; padding: 0; width: 30px; }
 .meta-action button:hover { color: var(--ink); }
 @media (max-width: 900px) { .meta-row { grid-template-columns: minmax(84px, .78fr) minmax(max-content, 1.7fr) minmax(84px, .78fr); }.meta-action { align-items: center; justify-content: center; } }
-@media (max-width: 680px) { .meta-row { gap: 16px 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); }.meta-parameters, .meta-lens { grid-column: 1 / -1; min-width: max-content; }.meta-action { grid-column: span 2; } .meta-action button { padding-top: 0; } }
+@media (max-width: 680px) { .meta-row { gap: 14px 10px; grid-template-columns: repeat(2, minmax(0, 1fr)); overflow-x: visible; }.meta-parameters, .meta-lens { grid-column: 1 / -1; min-width: 0; }.meta-parameters dd, .meta-lens dd { overflow-wrap: anywhere; white-space: normal; }.meta-action { grid-column: span 2; } .meta-action button { padding-top: 0; } }
 </style>

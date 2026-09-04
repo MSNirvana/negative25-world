@@ -191,10 +191,10 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
 .place-panel.mobile:not(.expanded) { height: 158px; }
 .place-panel.mobile.expanded { height: min(62svh, 560px); }
 .place-panel:not(.mobile):not(.expanded) { height: 158px; }
-.panel-toggle { align-items: center; background: transparent; color: var(--map-muted); display: flex; height: 34px; justify-content: center; padding: 0; position: absolute; right: 0; top: 0; width: 100%; z-index: 2; }
+.panel-toggle { align-items: center; background: transparent; color: var(--map-muted); display: flex; height: 40px; justify-content: center; padding: 0; position: absolute; right: 0; top: 0; width: 100%; z-index: 2; }
 .panel-toggle svg { transition: transform .24s ease; }
 .place-panel:not(.expanded) .panel-toggle svg { transform: rotate(180deg); }
-.panel-scroll { height: 100%; overflow-x: hidden; overflow-y: auto; padding: 34px 16px 40px; scrollbar-width: thin; }
+.panel-scroll { height: 100%; overflow-x: hidden; overflow-y: auto; padding: 40px 16px calc(40px + env(safe-area-inset-bottom)); scrollbar-width: thin; }
 .place-search { align-items: center; border: 1px solid var(--map-line); border-radius: 999px; color: var(--map-muted); display: flex; gap: 8px; min-height: 31px; padding: 5px 11px; }
 .place-search input { background: transparent; border: 0; color: var(--map-ink); font-size: 13px; min-width: 0; outline: 0; width: 100%; }
 .place-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
@@ -248,7 +248,7 @@ onBeforeUnmount(() => mediaQuery?.removeEventListener('change', onMediaChange));
 .panel-empty { align-items: center; color: var(--map-muted); display: flex; font-size: 12px; gap: 8px; line-height: 1.5; padding: 30px 4px; }
 .panel-empty p { margin: 0; }
 @media (max-width: 680px) {
-  .panel-scroll { padding-left: 16px; padding-right: 16px; }
+  .panel-scroll { padding: 40px 16px calc(40px + env(safe-area-inset-bottom)); }
   .panel-meta { margin-top: 11px; }
   .place-section { margin-top: 25px; }
   .place-card { flex-basis: 168px; height: 168px; }

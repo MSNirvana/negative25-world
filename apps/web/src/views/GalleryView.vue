@@ -163,7 +163,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.gallery-page { min-height: 100vh; padding-bottom: 64px; }
+.gallery-page { min-height: 100vh; min-height: 100dvh; padding-bottom: calc(86px + env(safe-area-inset-bottom)); }
 .gallery-content { margin-top: 24px; max-width: none; padding-left: 40px; padding-right: 40px; width: 100%; }
 .empty-state { border-top: 1px solid var(--line); color: var(--muted); padding: 72px 0; text-align: center; }
 .gallery-sentinel { align-items: center; color: var(--muted); display: flex; font-size: 11px; gap: 12px; justify-content: center; min-height: 64px; padding: 12px 20px; }

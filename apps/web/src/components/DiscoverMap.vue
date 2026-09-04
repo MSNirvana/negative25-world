@@ -342,7 +342,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.discover-map { background: var(--map-paper); height: 100svh; min-height: 620px; overflow: hidden; position: relative; width: 100%; }
+.discover-map { background: var(--map-paper); height: 100svh; height: 100dvh; min-height: 620px; overflow: hidden; position: relative; width: 100%; }
 .map-shell, .amap-container { height: 100%; inset: 0; position: absolute; width: 100%; }
 .amap-container { background: var(--map-paper); }
 .circle-overlay { background: color-mix(in srgb, var(--map-marker) 8%, transparent); border: 2px solid color-mix(in srgb, var(--map-marker) 84%, var(--map-ink)); border-radius: 50%; box-shadow: 0 0 0 1px color-mix(in srgb, var(--map-paper) 55%, transparent), 0 3px 18px color-mix(in srgb, var(--map-ink) 18%, transparent); pointer-events: none; position: absolute; transform: translateZ(0); z-index: 3; }
@@ -359,7 +359,7 @@ onBeforeUnmount(() => {
 :deep(.amap-logo), :deep(.amap-copyright) { display: none !important; visibility: hidden !important; }
 :deep(.amap-cluster-marker) { align-items: center; background: var(--map-cluster); border: 1px solid color-mix(in srgb, var(--map-marker) 35%, var(--map-ink)); border-radius: 50%; box-shadow: 0 2px 10px color-mix(in srgb, var(--map-ink) 48%, transparent); color: var(--map-cluster-ink); cursor: pointer; display: flex; font-size: 11px; font-weight: 700; justify-content: center; outline: none; position: relative; }
 @media (max-width: 680px) {
-  .discover-map { min-height: 100svh; }
+  .discover-map { min-height: 100svh; min-height: 100dvh; }
   .map-controls { right: 12px; top: 106px; }
   .map-attribution { bottom: 164px; font-size: 9px; right: 10px; }
 }

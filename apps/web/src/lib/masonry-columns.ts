@@ -7,7 +7,7 @@ export type MasonryColumn<T> = {
 };
 
 export function masonryColumnCountForWidth(width: number): number {
-  if (!Number.isFinite(width) || width < 620) return 1;
+  if (!Number.isFinite(width) || width < 320) return 1;
   if (width < 1000) return 2;
   if (width < 1500) return 3;
   if (width < 1800) return 4;

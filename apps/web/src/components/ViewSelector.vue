@@ -25,5 +25,5 @@ button { align-items: center; background: transparent; border-radius: 16px; colo
 button:hover { color: var(--ink); }
 button.active { background: color-mix(in srgb, var(--ink) 14%, transparent); color: var(--ink); font-weight: 650; }
 @media (max-width: 1180px) { .global-view-selector { right: 28px; } }
-@media (max-width: 800px) { .global-view-selector { bottom: max(24px, env(safe-area-inset-bottom)); left: 50%; right: auto; top: auto; transform: translateX(-50%); } }
+@media (max-width: 800px) { .global-view-selector { bottom: calc(16px + env(safe-area-inset-bottom)); left: 50%; right: auto; top: auto; transform: translateX(-50%); } }
 </style>

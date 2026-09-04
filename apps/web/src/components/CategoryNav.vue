@@ -43,7 +43,7 @@ button.active { border-bottom-color: var(--ink); color: var(--ink); opacity: 1; 
 @media (max-width: 1180px) { .category-nav { padding-left: 28px; padding-right: 28px; width: 100%; } }
 @media (max-width: 580px) {
   .category-nav { gap: 23px; height: 48px; padding-left: 16px; padding-right: 16px; }
-  .category-bar.is-inline .category-nav { gap: 23px; height: 48px; overflow-x: auto; overflow-y: visible; padding-left: 0; padding-right: 0; width: 100%; }
+  .category-bar.is-inline .category-nav { gap: 23px; height: 48px; overflow-x: auto; overflow-y: visible; padding-left: 0; padding-right: 16px; scroll-padding-inline: 0 16px; width: 100%; }
   button { font-size: 15px; }
 }
 </style>

@@ -123,10 +123,10 @@ onBeforeUnmount(() => { window.removeEventListener('click', closeMenu); if (user
   .header-inner { align-items: flex-start; flex-direction: column; gap: 18px; height: auto; }
   .header-start { align-items: flex-start; flex-direction: column; gap: 12px; width: 100%; }
   .header-start :deep(.category-bar.is-inline) { width: 100%; }
-  .utility-nav { gap: 0; margin-left: -12px; margin-right: 0; overflow-x: auto; max-width: calc(100vw - 32px); scrollbar-width: none; }
+  .utility-nav { gap: 0; margin-left: -12px; margin-right: 0; max-width: calc(100vw - 32px); min-width: 0; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .utility-nav::-webkit-scrollbar { display: none; }
   .utility-nav a, .utility-nav > .menu-item > button, .studio-link { font-size: 12px; padding: 7px 12px; }
-  .menu-popover { left: 0; right: auto; top: calc(100% + 8px); }
+  .menu-popover { left: 0; max-width: calc(100vw - 32px); right: auto; top: calc(100% + 8px); }
   .user-search-popover { min-width: min(280px, calc(100vw - 32px)); }
 }
 </style>

@@ -27,7 +27,9 @@ function safeRatio(photo: RatioPhoto): number {
 }
 
 export function buildJustifiedRows<T extends RatioPhoto>(photos: readonly T[], width: number, gap = 12): JustifiedRow<T>[] {
-  const availableWidth = Math.max(width, 720);
+  // Use the measured container width on narrow screens. The previous 720px
+  // floor made mobile rows wider than their viewport until the next resize.
+  const availableWidth = width > 0 ? width : 320;
   const targetHeight = targetHeightForWidth(width);
   const maxPhotosPerRow = maxPhotosPerRowForWidth(width);
   const nextRows: Array<{ photos: T[]; startIndex: number }> = [];

@@ -90,5 +90,5 @@ watch(() => workspace.slug, () => { draft.value = null; void load(); });
 .photo-filter { color: var(--muted); display: grid; font-size: 11px; gap: 6px; margin: 0 0 10px; }
 .photo-filter input { background: var(--surface); border: 1px solid var(--line); border-radius: 4px; color: var(--ink); font: inherit; font-size: 13px; min-width: 0; padding: 9px 10px; }
 .photo-filter input:focus { border-color: var(--accent-deep); outline: 2px solid color-mix(in srgb, var(--accent) 35%, transparent); }
-@media (max-width: 640px) { .view-heading { align-items: flex-start; flex-direction: column; }.view-heading h2 { font-size: 31px; }.editor-fields, .photo-picker { grid-template-columns: 1fr; }.album-row { gap: 11px; grid-template-columns: 88px minmax(0, 1fr); min-height: 88px; padding: 11px 0; }.album-cover { width: 88px; }.album-actions { grid-column: 2; justify-content: flex-start; } }
+@media (max-width: 640px) { .view-heading { align-items: flex-start; flex-direction: column; }.view-heading h2 { font-size: 31px; }.editor-fields, .photo-picker { grid-template-columns: 1fr; }.editor-actions { flex-wrap: wrap; }.album-row { gap: 11px; grid-template-columns: 88px minmax(0, 1fr); min-height: 88px; padding: 11px 0; }.album-cover { width: 88px; }.album-actions { grid-column: 2; justify-content: flex-start; } }
 </style>

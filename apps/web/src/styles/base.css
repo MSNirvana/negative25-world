@@ -8,7 +8,7 @@ button, a { color: inherit; font: inherit; }
 button { border: 0; cursor: pointer; -webkit-tap-highlight-color: transparent; }
 a { text-decoration: none; }
 button:focus-visible, a:focus-visible, input:focus-visible, select:focus-visible, textarea:focus-visible { outline: 2px solid var(--accent-deep); outline-offset: 3px; }
-.app-shell { min-height: 100vh; }
+.app-shell { min-height: 100vh; min-height: 100dvh; }
 .page-frame { margin: 0 auto; width: min(calc(100% - 56px), var(--max-width)); }
 .muted { color: var(--muted); }
 .eyebrow { color: var(--muted); font-size: 10px; font-weight: 650; letter-spacing: .12em; text-transform: uppercase; }

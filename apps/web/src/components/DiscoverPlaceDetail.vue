@@ -55,8 +55,8 @@ const descriptions = () => [...new Set(props.location.photos.map((photo) => phot
   .place-detail.single-photo { width: min(420px, calc(100vw - 32px)); }
 }
 @media (max-width: 680px) {
-  .place-detail, .place-detail.single-photo { border: 0; border-radius: 0; box-shadow: none; display: block; inset: 0; max-height: none; overflow: auto; padding: 92px 16px 44px; position: absolute; width: 100%; z-index: 3; }
-  .detail-heading h1 { font-size: 42px; }
+  .place-detail, .place-detail.single-photo { border: 0; border-radius: 0; box-shadow: none; display: block; inset: 0; max-height: none; overflow: auto; padding: calc(78px + env(safe-area-inset-top)) 16px calc(44px + env(safe-area-inset-bottom)); position: absolute; width: 100%; z-index: 3; }
+  .detail-heading h1 { font-size: clamp(32px, 10vw, 42px); overflow-wrap: anywhere; }
   .detail-grid { gap: 15px; grid-template-columns: repeat(2, minmax(0, 1fr)); padding-left: 0; padding-right: 0; }
   .detail-grid :deep(.image-wrap) { border-radius: 4px; }
 }
