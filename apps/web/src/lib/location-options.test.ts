@@ -20,10 +20,33 @@ describe('location options', () => {
 
   it('only includes existing non-China regions and filters by stable IDs', () => {
     const options = buildLocationOptions(photos);
-    expect(options.filter((option) => option.group === 'other')).toEqual([expect.objectContaining({ label: 'Dolomites, Italy', count: 2 })]);
+    expect(options.filter((option) => option.group === 'other')).toEqual([expect.objectContaining({ id: 'italy', label: '意大利', labelEn: 'Italy', count: 2 })]);
     expect(filterPhotosByLocation(photos, 'beijing')).toHaveLength(1);
+    expect(filterPhotosByLocation(photos, 'italy')).toHaveLength(2);
     expect(filterPhotosByLocation(photos, 'dolomites-italy')).toHaveLength(2);
     expect(filterPhotosByLocation(photos, null)).toHaveLength(4);
+  });
+
+  it('merges manually prefixed Singapore landmarks into one country option', () => {
+    const singaporePhotos = [
+      { id: 'marina', location: '新加坡·金沙赌场', locationRegion: '新加坡' },
+      { id: 'merlion', location: '新加坡·鱼尾狮', locationRegion: '新加坡' },
+      { id: 'changi', location: 'Changi Airport, Singapore' },
+    ];
+    const options = buildLocationOptions(singaporePhotos);
+    expect(options.filter((option) => option.group === 'other')).toEqual([expect.objectContaining({ id: 'singapore', label: '新加坡', labelEn: 'Singapore', count: 3 })]);
+    expect(filterPhotosByLocation(singaporePhotos, 'singapore').map((photo) => photo.id)).toEqual(['marina', 'merlion', 'changi']);
+  });
+
+  it('keeps an explicit unknown country together while leaving unknown places separate', () => {
+    const photosWithUnknownRegion = [
+      { id: 'one', location: '马累·海边', locationRegion: '马尔代夫' },
+      { id: 'two', location: '马累·老城', locationRegion: '马尔代夫' },
+      { id: 'three', location: '未知山谷' },
+    ];
+    const options = buildLocationOptions(photosWithUnknownRegion);
+    expect(options.find((option) => option.id === '马尔代夫')).toMatchObject({ label: '马尔代夫', count: 2 });
+    expect(options.find((option) => option.label === '未知山谷')).toMatchObject({ count: 1 });
   });
 
   it('groups Shanxi landmarks under Shanxi instead of listing each landmark', () => {

@@ -292,7 +292,7 @@ test('location mode opens a searchable picker and filters the gallery', async ({
   await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
     const location = new URL(route.request().url()).searchParams.get('location');
     galleryRequests.push(location ?? 'all');
-    const filtered = location === 'dolomites-italy' ? photos.slice(1) : location === 'beijing' ? photos.slice(0, 1) : photos;
+    const filtered = location === 'italy' ? photos.slice(1) : location === 'beijing' ? photos.slice(0, 1) : photos;
     await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: filtered, pagination: { nextCursor: null, hasMore: false } }) });
   });
   await page.goto('/');
@@ -304,13 +304,13 @@ test('location mode opens a searchable picker and filters the gallery', async ({
   await expect(page.getByRole('option', { name: 'Sichuan' })).toBeDisabled();
   const picker = page.getByRole('dialog', { name: 'Choose a location' });
   const requestsBeforePendingSelection = galleryRequests.length;
-  await picker.getByRole('option', { name: /Dolomites, Italy/ }).click();
+  await picker.getByRole('option', { name: 'Italy' }).click();
   await expect(page).toHaveURL(/\/$/);
   expect(galleryRequests.length).toBe(requestsBeforePendingSelection);
   await expect(page.getByRole('button', { name: 'Open Beijing frame' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open Dolomites frame' })).toBeVisible();
   await picker.getByRole('button', { name: 'Confirm' }).click();
-  await expect(page).toHaveURL(/mode=location&location=dolomites-italy/);
+  await expect(page).toHaveURL(/mode=location&location=italy/);
   await expect(page.getByRole('button', { name: 'Open Dolomites frame' })).toBeVisible();
   await expect(page.getByRole('button', { name: 'Open Beijing frame' })).toHaveCount(0);
   const singlePhotoCell = page.locator('.photo-column .photo-cell');
@@ -321,7 +321,7 @@ test('location mode opens a searchable picker and filters the gallery', async ({
   await page.getByRole('button', { name: 'Region' }).click();
   const beijingPicker = page.getByRole('dialog', { name: 'Choose a location' });
   await beijingPicker.getByRole('option', { name: 'Beijing' }).click();
-  await expect(page).toHaveURL(/mode=location&location=dolomites-italy/);
+  await expect(page).toHaveURL(/mode=location&location=italy/);
   await expect(page.getByRole('button', { name: 'Open Dolomites frame' })).toBeVisible();
   await beijingPicker.getByRole('button', { name: 'Confirm' }).click();
   await expect(page).toHaveURL(/mode=location&location=beijing/);

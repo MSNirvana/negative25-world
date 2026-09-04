@@ -26,6 +26,15 @@ describe('gallery location filtering', () => {
   it('matches normalized location slugs for other regions', () => {
     expect(filterPhotosByLocation(photos, 'dolomites-italy').map((photo) => photo.id)).toEqual(['dolomites']);
   });
+
+  it('matches all Singapore locations through the stable country ID', () => {
+    const singaporePhotos = [
+      { id: 'marina', location: { id: 'location-marina', name: '新加坡·金沙赌场' }, metadata: { displayRegion: '新加坡' } },
+      { id: 'merlion', location: { id: 'location-merlion', name: 'Singapore·Merlion' }, metadata: {} },
+      { id: 'japan', location: { id: 'location-japan', name: '东京·浅草' }, metadata: { displayRegion: '日本' } },
+    ];
+    expect(filterPhotosByLocation(singaporePhotos, 'singapore').map((photo) => photo.id)).toEqual(['marina', 'merlion']);
+  });
 });
 
 describe('gallery ordering', () => {

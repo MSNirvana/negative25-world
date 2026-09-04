@@ -1,4 +1,4 @@
-import { CHINA_REGION_DEFINITIONS, locationMatchesRegion, normalizeLocationText, regionForLocation, type ChinaRegionDefinition } from '@negative25/contracts';
+import { CHINA_REGION_DEFINITIONS, locationMatchesRegion, normalizeLocationText, overseasRegionForId, overseasRegionForLocation, regionForLocation, type ChinaRegionDefinition, type OverseasRegionDefinition } from '@negative25/contracts';
 import type { GalleryPhoto } from '../stores/gallery';
 
 export type LocationOption = {
@@ -12,7 +12,8 @@ export type LocationOption = {
   available: boolean;
 };
 
-type LocationPhoto = Pick<GalleryPhoto, 'location' | 'locationId' | 'locationName' | 'locationRegion'>;
+type LocationPhoto = Pick<GalleryPhoto, 'location' | 'locationId' | 'locationName' | 'locationRegion'> & { id?: string };
+type OverseasLocationGroup = Pick<OverseasRegionDefinition, 'id' | 'nameZh' | 'nameEn' | 'aliases'>;
 
 export function buildLocationOptions(photos: readonly LocationPhoto[]): LocationOption[] {
   const china = CHINA_REGION_DEFINITIONS.map((region) => {
@@ -20,25 +21,32 @@ export function buildLocationOptions(photos: readonly LocationPhoto[]): Location
     return regionOption(region, matches.length);
   });
 
-  const otherByKey = new Map<string, { label: string; count: number }>();
-  for (const photo of photos) {
+  const otherByKey = new Map<string, { id: string; label: string; labelEn: string; aliases: string[]; count: number; seenIds: Set<string> }>();
+  for (const [index, photo] of photos.entries()) {
     const label = photo.location.trim();
-    if (!isUsefulLocation(label) || regionForLocation(label) || regionForLocation(photo.locationRegion ?? '') || isChinaLocation(label)) continue;
-    const key = normalizeLocationText(label);
+    if (!isUsefulLocation(label) || regionForLocation(label) || regionForLocation(photo.locationRegion ?? '') || isChinaLocation(label) || isChinaLocation(photo.locationRegion ?? '')) continue;
+    const overseasGroup = overseasGroupForPhoto(photo);
+    const key = overseasGroup?.id ?? normalizeLocationText(label);
+    const optionId = overseasGroup?.id ?? slugifyLocation(label);
+    const photoId = photo.id || `photo-index-${index}`;
     const current = otherByKey.get(key);
-    if (current) current.count += 1;
-    else otherByKey.set(key, { label, count: 1 });
+    if (current) {
+      if (!current.seenIds.has(photoId)) current.count += 1;
+      current.seenIds.add(photoId);
+    } else {
+      otherByKey.set(key, { id: optionId, label: overseasGroup?.nameZh ?? label, labelEn: overseasGroup?.nameEn ?? label, aliases: [...(overseasGroup?.aliases ?? [label])], count: 1, seenIds: new Set([photoId]) });
+    }
   }
 
-  const other = [...otherByKey.values()]
-    .sort((a, b) => a.label.localeCompare(b.label))
-    .map(({ label, count }) => ({
-      id: slugifyLocation(label),
+  const other = [...otherByKey.entries()]
+    .sort(([, a], [, b]) => a.label.localeCompare(b.label))
+    .map(([, { id, label, labelEn, aliases, count }]) => ({
+      id,
       group: 'other' as const,
       label,
-      labelEn: label,
-      query: slugifyLocation(label),
-      aliases: [label],
+      labelEn,
+      query: id,
+      aliases,
       count,
       available: true,
     }));
@@ -48,6 +56,10 @@ export function buildLocationOptions(photos: readonly LocationPhoto[]): Location
 export function photoMatchesLocation(photo: LocationPhoto, locationId: string): boolean {
   const region = CHINA_REGION_DEFINITIONS.find((item) => item.id === locationId);
   if (region) return photoLocationMatchesRegion(photo, region);
+  const overseasRegion = overseasRegionForId(locationId);
+  if (overseasRegion) return overseasGroupForPhoto(photo)?.id === overseasRegion.id;
+  const overseasGroup = overseasGroupForPhoto(photo);
+  if (overseasGroup?.id === locationId) return true;
   return isUsefulLocation(photo.location) && slugifyLocation(photo.location) === locationId;
 }
 
@@ -67,6 +79,23 @@ function regionOption(region: ChinaRegionDefinition, count: number): LocationOpt
 function photoLocationMatchesRegion(photo: LocationPhoto, region: ChinaRegionDefinition): boolean {
   const candidates = [photo.location, photo.locationName, photo.locationRegion].filter((value): value is string => Boolean(value && isUsefulLocation(value)));
   return candidates.some((value) => locationMatchesRegion(value, region)) || region.aliases.some((alias) => photo.locationId?.toLocaleLowerCase().includes(normalizeLocationText(alias)));
+}
+
+function overseasGroupForPhoto(photo: LocationPhoto): OverseasLocationGroup | undefined {
+  const explicitRegion = photo.locationRegion?.trim();
+  if (explicitRegion && isUsefulLocation(explicitRegion) && !regionForLocation(explicitRegion) && !isChinaLocation(explicitRegion)) {
+    return overseasRegionForLocation(explicitRegion) ?? dynamicOverseasGroup(explicitRegion);
+  }
+  for (const value of [photo.location, photo.locationName ?? '']) {
+    if (!isUsefulLocation(value) || regionForLocation(value) || isChinaLocation(value)) continue;
+    const knownRegion = overseasRegionForLocation(value);
+    if (knownRegion) return knownRegion;
+  }
+  return undefined;
+}
+
+function dynamicOverseasGroup(label: string): OverseasLocationGroup {
+  return { id: slugifyLocation(label), nameZh: label, nameEn: label, aliases: [label] };
 }
 
 function isChinaLocation(value: string): boolean {

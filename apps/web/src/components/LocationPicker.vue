@@ -26,8 +26,9 @@ const hasResults = computed(() => chinaOptions.value.length > 0 || otherOptions.
 function filterOptions(values: LocationOption[]): LocationOption[] {
   const needle = query.value.trim().toLocaleLowerCase();
   if (!needle) return values;
-  return values.filter((option) => `${option.label} ${option.labelEn}`.toLocaleLowerCase().includes(needle));
+  return values.filter((option) => `${option.label} ${option.labelEn} ${option.aliases.join(' ')}`.toLocaleLowerCase().includes(needle));
 }
+
 function toggle(): void {
   if (open.value) {
     closePicker();
@@ -148,6 +149,8 @@ onBeforeUnmount(() => {
 .location-search { align-items: center; background: var(--surface-soft); border: 1px solid var(--line); border-radius: 5px; color: var(--muted); display: flex; gap: 7px; padding: 8px 9px; }
 .location-search:focus-within { border-color: var(--ink); color: var(--ink); }
 .location-search input { background: transparent; border: 0; color: var(--ink); font: inherit; font-size: 12px; min-width: 0; outline: 0; width: 100%; }
+.location-search input::-webkit-search-cancel-button { -webkit-appearance: none; appearance: none; }
+.location-search input::-ms-clear { display: none; }
 .location-options { max-height: min(54vh, 390px); overflow-y: auto; padding-right: 2px; }
 .all-location, .location-option { align-items: center; background: transparent; border: 0; border-radius: 5px; color: var(--muted); display: flex; font-size: 12px; gap: 8px; justify-content: space-between; min-height: 32px; padding: 7px 8px; text-align: left; width: 100%; }
 .all-location { color: var(--ink); font-weight: 600; margin-bottom: 8px; }

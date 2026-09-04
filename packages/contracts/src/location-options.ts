@@ -43,6 +43,51 @@ export const CHINA_REGION_DEFINITIONS: readonly ChinaRegionDefinition[] = [
   { id: 'taiwan', nameZh: '台湾省', nameEn: 'Taiwan', aliases: ['台湾', '台湾省', '臺灣', 'taiwan'] },
 ] as const;
 
+export type OverseasRegionDefinition = {
+  id: string;
+  nameZh: string;
+  nameEn: string;
+  aliases: string[];
+};
+
+/** Common country aliases used to merge manually named overseas locations. */
+export const OVERSEAS_REGION_DEFINITIONS: readonly OverseasRegionDefinition[] = [
+  { id: 'singapore', nameZh: '新加坡', nameEn: 'Singapore', aliases: ['新加坡', 'Singapore', 'Republic of Singapore'] },
+  { id: 'japan', nameZh: '日本', nameEn: 'Japan', aliases: ['日本', 'Japan'] },
+  { id: 'italy', nameZh: '意大利', nameEn: 'Italy', aliases: ['意大利', 'Italy'] },
+  { id: 'canada', nameZh: '加拿大', nameEn: 'Canada', aliases: ['加拿大', 'Canada'] },
+  { id: 'united-states', nameZh: '美国', nameEn: 'United States', aliases: ['美国', 'United States', 'United States of America', 'USA'] },
+  { id: 'united-kingdom', nameZh: '英国', nameEn: 'United Kingdom', aliases: ['英国', '英國', 'United Kingdom', 'Great Britain', 'Britain', 'UK', 'England', 'Scotland', 'Wales'] },
+  { id: 'australia', nameZh: '澳大利亚', nameEn: 'Australia', aliases: ['澳大利亚', '澳洲', 'Australia'] },
+  { id: 'new-zealand', nameZh: '新西兰', nameEn: 'New Zealand', aliases: ['新西兰', 'New Zealand'] },
+  { id: 'france', nameZh: '法国', nameEn: 'France', aliases: ['法国', 'France'] },
+  { id: 'germany', nameZh: '德国', nameEn: 'Germany', aliases: ['德国', 'Germany'] },
+  { id: 'switzerland', nameZh: '瑞士', nameEn: 'Switzerland', aliases: ['瑞士', 'Switzerland'] },
+  { id: 'austria', nameZh: '奥地利', nameEn: 'Austria', aliases: ['奥地利', 'Austria'] },
+  { id: 'spain', nameZh: '西班牙', nameEn: 'Spain', aliases: ['西班牙', 'Spain'] },
+  { id: 'portugal', nameZh: '葡萄牙', nameEn: 'Portugal', aliases: ['葡萄牙', 'Portugal'] },
+  { id: 'netherlands', nameZh: '荷兰', nameEn: 'Netherlands', aliases: ['荷兰', 'Netherlands', 'Holland'] },
+  { id: 'thailand', nameZh: '泰国', nameEn: 'Thailand', aliases: ['泰国', 'Thailand'] },
+  { id: 'malaysia', nameZh: '马来西亚', nameEn: 'Malaysia', aliases: ['马来西亚', 'Malaysia'] },
+  { id: 'indonesia', nameZh: '印度尼西亚', nameEn: 'Indonesia', aliases: ['印度尼西亚', '印尼', 'Indonesia'] },
+  { id: 'vietnam', nameZh: '越南', nameEn: 'Vietnam', aliases: ['越南', 'Vietnam'] },
+  { id: 'south-korea', nameZh: '韩国', nameEn: 'South Korea', aliases: ['韩国', '南韩', 'South Korea', 'Republic of Korea'] },
+  { id: 'philippines', nameZh: '菲律宾', nameEn: 'Philippines', aliases: ['菲律宾', 'Philippines'] },
+  { id: 'india', nameZh: '印度', nameEn: 'India', aliases: ['印度', 'India'] },
+  { id: 'nepal', nameZh: '尼泊尔', nameEn: 'Nepal', aliases: ['尼泊尔', 'Nepal'] },
+  { id: 'sri-lanka', nameZh: '斯里兰卡', nameEn: 'Sri Lanka', aliases: ['斯里兰卡', 'Sri Lanka'] },
+  { id: 'united-arab-emirates', nameZh: '阿联酋', nameEn: 'United Arab Emirates', aliases: ['阿联酋', 'United Arab Emirates', 'UAE'] },
+  { id: 'turkey', nameZh: '土耳其', nameEn: 'Turkey', aliases: ['土耳其', 'Turkey', 'Türkiye'] },
+  { id: 'russia', nameZh: '俄罗斯', nameEn: 'Russia', aliases: ['俄罗斯', 'Russia'] },
+  { id: 'egypt', nameZh: '埃及', nameEn: 'Egypt', aliases: ['埃及', 'Egypt'] },
+  { id: 'south-africa', nameZh: '南非', nameEn: 'South Africa', aliases: ['南非', 'South Africa'] },
+  { id: 'brazil', nameZh: '巴西', nameEn: 'Brazil', aliases: ['巴西', 'Brazil'] },
+  { id: 'mexico', nameZh: '墨西哥', nameEn: 'Mexico', aliases: ['墨西哥', 'Mexico'] },
+  { id: 'argentina', nameZh: '阿根廷', nameEn: 'Argentina', aliases: ['阿根廷', 'Argentina'] },
+  { id: 'chile', nameZh: '智利', nameEn: 'Chile', aliases: ['智利', 'Chile'] },
+  { id: 'peru', nameZh: '秘鲁', nameEn: 'Peru', aliases: ['秘鲁', 'Peru'] },
+] as const;
+
 export function normalizeLocationText(value: string): string {
   return value.trim().toLocaleLowerCase().replace(/[\s,，、·._/\\-]+/g, '');
 }
@@ -54,4 +99,21 @@ export function locationMatchesRegion(value: string, region: ChinaRegionDefiniti
 
 export function regionForLocation(value: string): ChinaRegionDefinition | undefined {
   return CHINA_REGION_DEFINITIONS.find((region) => locationMatchesRegion(value, region));
+}
+
+export function overseasRegionForLocation(value: string): OverseasRegionDefinition | undefined {
+  const normalized = normalizeLocationText(value);
+  if (!normalized) return undefined;
+  const segments = value.split(/[·•|,/，、()[\]（）]+/u).map(normalizeLocationText).filter(Boolean);
+  return OVERSEAS_REGION_DEFINITIONS.find((region) => region.aliases.some((alias) => {
+    const normalizedAlias = normalizeLocationText(alias);
+    if (!normalizedAlias) return false;
+    if (normalized === normalizedAlias || segments.includes(normalizedAlias)) return true;
+    return normalizedAlias.length >= 3 && (normalized.includes(normalizedAlias) || segments.some((segment) => segment.includes(normalizedAlias)));
+  }));
+}
+
+export function overseasRegionForId(value: string): OverseasRegionDefinition | undefined {
+  const normalized = normalizeLocationText(value);
+  return OVERSEAS_REGION_DEFINITIONS.find((region) => normalizeLocationText(region.id) === normalized || normalizeLocationText(region.nameZh) === normalized || normalizeLocationText(region.nameEn) === normalized || region.aliases.some((alias) => normalizeLocationText(alias) === normalized));
 }

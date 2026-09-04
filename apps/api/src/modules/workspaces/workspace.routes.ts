@@ -2,7 +2,7 @@ import type { FastifyInstance } from 'fastify';
 import { WorkspaceService } from './workspace.service.js';
 import { AuthService } from '../auth/auth.service.js';
 import { getBearer } from '../auth/auth.routes.js';
-import { CHINA_REGION_DEFINITIONS, locationMatchesRegion, normalizeLocationText } from '@negative25/contracts';
+import { CHINA_REGION_DEFINITIONS, locationMatchesRegion, normalizeLocationText, overseasRegionForId, overseasRegionForLocation } from '@negative25/contracts';
 import { ApiError } from '@negative25/utils';
 import { isPhotoPublic } from '../../db/repository.js';
 
@@ -94,6 +94,7 @@ function parseShuffleSeed(value: string): number {
 export function filterPhotosByLocation<T extends { location?: { id: string; name: string } | null; metadata?: Record<string, unknown> }>(photos: T[], query: string): T[] {
   const normalizedQuery = normalizeLocationText(query);
   const region = CHINA_REGION_DEFINITIONS.find((item) => normalizeLocationText(item.id) === normalizedQuery || locationMatchesRegion(query, item));
+  const overseasRegion = overseasRegionForId(query);
   const querySlug = slugifyLocation(query);
   return photos.filter((photo) => {
     const metadataCandidates = ['locationName', 'displayRegion', 'displayAddress']
@@ -101,6 +102,7 @@ export function filterPhotosByLocation<T extends { location?: { id: string; name
       .filter((value): value is string => typeof value === 'string' && Boolean(value.trim()));
     const candidates = [photo.location?.name, photo.location?.id, ...metadataCandidates].filter((value): value is string => Boolean(value));
     if (region) return candidates.some((value) => locationMatchesRegion(value, region));
+    if (overseasRegion) return candidates.some((value) => overseasRegionForLocation(value)?.id === overseasRegion.id);
     return candidates.some((value) => normalizeLocationText(value).includes(normalizedQuery) || slugifyLocation(value).includes(querySlug));
   });
 }

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import type { GalleryPhoto } from '../stores/gallery';
-import { clusterLocations, filterLocations, fromAMapCoordinates, groupForAddressParts, groupPhotosByRegion, isValidCoordinates, normalizeLocations, photosInCircle, pointInCircle, projectCoordinates, toAMapCoordinates } from './discover-map-data';
+import { DISCOVER_GROUPS, clusterLocations, filterLocations, fromAMapCoordinates, groupForAddressParts, groupPhotosByRegion, isValidCoordinates, normalizeLocations, photosInCircle, pointInCircle, projectCoordinates, toAMapCoordinates } from './discover-map-data';
 
 function photo(overrides: Partial<GalleryPhoto> = {}): GalleryPhoto {
   return {
@@ -9,6 +9,10 @@ function photo(overrides: Partial<GalleryPhoto> = {}): GalleryPhoto {
 }
 
 describe('discover map data', () => {
+  it('keeps Asia as a data classification without exposing the removed panel group', () => {
+    expect(DISCOVER_GROUPS.some((group) => group.id === 'asia')).toBe(false);
+  });
+
   it('projects valid coordinates to the world extent', () => {
     expect(projectCoordinates({ latitude: 90, longitude: -180 })).toEqual({ x: 0, y: 0 });
     expect(projectCoordinates({ latitude: 0, longitude: 0 })).toEqual({ x: 600, y: 310 });
