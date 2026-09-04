@@ -74,6 +74,40 @@ test('negative25 branding and canonical metadata are present', async ({ page }) 
   await expect(page.locator('meta[name="description"]')).toHaveAttribute('content', /negative25/);
 });
 
+test('returning from the personal center reloads the cached gallery', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('negative25.session', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh', expiresIn: 3600 })));
+  const photo = {
+    id: 'return-frame',
+    spaceSlug: 'primary',
+    title: 'Return frame',
+    description: '',
+    capturedAt: '2026-01-02T03:04:05.000Z',
+    rating: 7,
+    aspectRatio: 1.5,
+    thumbnail: { kind: 'thumbnail', url: 'https://example.com/return.jpg', width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  };
+  let galleryRequestCount = 0;
+  await page.route('**/api/v1/auth/me', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user-1', username: 'owner', email: 'owner@n25.world', name: 'Owner', emailVerifiedAt: null }) }));
+  await page.route('**/api/v1/workspaces', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'workspace-1', slug: 'primary', name: 'negative25', role: 'owner' }]) }));
+  await page.route('**/api/v1/admin/spaces/primary/summary', async (route) => route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ workspace: { id: 'workspace-1', slug: 'primary', name: 'negative25', role: 'owner' }, stats: { photoCount: 1, publishedPhotoCount: 1, pendingImportCount: 0 }, recentActivity: [] }) }));
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    galleryRequestCount += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: [photo], pagination: { nextCursor: null, hasMore: false } }) });
+  });
+
+  await page.goto('/');
+  await expect(page.getByRole('button', { name: 'Open Return frame' })).toBeVisible();
+  await page.getByRole('button', { name: 'Personal center' }).click();
+  await expect(page).toHaveURL(/\/account$/);
+  await page.getByRole('button', { name: 'Back to gallery' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: 'Open Return frame' })).toBeVisible();
+  await expect.poll(() => galleryRequestCount).toBeGreaterThanOrEqual(2);
+});
+
 test('header utility navigation keeps user search and about actions', async ({ page }) => {
   await page.goto('/');
   await expect(page.getByRole('button', { name: 'Get the app' })).toHaveCount(0);

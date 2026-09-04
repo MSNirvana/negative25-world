@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, nextTick, onBeforeUnmount, onMounted, ref, watch } from 'vue';
+import { computed, nextTick, onActivated, onBeforeUnmount, onMounted, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PhotoGrid from '../components/PhotoGrid.vue';
 import AlbumStacks from '../components/AlbumStacks.vue';
@@ -29,6 +29,8 @@ const albumsLoading = ref(false);
 const albumsError = ref<string | null>(null);
 const expandedAlbumId = ref<string | null>(null);
 let albumRequestId = 0;
+let contextRequestId = 0;
+let hasActivated = false;
 const modeLabels: Record<GalleryMode, string> = { featured: 'gallery.featuredHeading', recent: 'gallery.recentHeading', shuffle: 'gallery.shuffleHeading', location: 'gallery.locationHeading', nearby: 'gallery.nearbyHeading', faraway: 'gallery.farawayHeading' };
 const heading = computed(() => t(modeLabels[gallery.mode]));
 const contextReady = ref(false);
@@ -39,10 +41,14 @@ function markContextReady(): void {
 }
 
 async function syncGalleryContext(): Promise<void> {
+  const requestId = ++contextRequestId;
+  contextReady.value = false;
   await session.loadUser();
+  if (requestId !== contextRequestId) return;
   const viewingUsername = typeof route.query.user === 'string' ? route.query.user : null;
   if (viewingUsername) {
     const profile = await publicViewer.load(viewingUsername);
+    if (requestId !== contextRequestId) return;
     gallery.setContext(profile?.workspaceSlug ?? 'primary', null);
     markContextReady();
     return;
@@ -50,6 +56,7 @@ async function syncGalleryContext(): Promise<void> {
   publicViewer.clear();
   if (session.authenticated) {
     await workspace.load(session.accessToken);
+    if (requestId !== contextRequestId) return;
     gallery.setContext(workspace.slug, session.accessToken);
   } else {
     gallery.setContext('primary', null);
@@ -101,8 +108,17 @@ onMounted(() => {
   loadObserver = new IntersectionObserver((entries) => { if (entries.some((entry) => entry.isIntersecting)) loadMore(); }, { rootMargin: '0px 0px 720px', threshold: 0.01 });
   observeSentinel();
 });
+onActivated(() => {
+  // GalleryView is kept alive while the account area is open. Re-sync the
+  // active workspace on return so the cached view cannot remain empty/stale.
+  if (hasActivated) void syncGalleryContext();
+  hasActivated = true;
+});
 watch(() => gallery.nextCursor, () => void nextTick(observeSentinel));
-onBeforeUnmount(() => loadObserver?.disconnect());
+onBeforeUnmount(() => {
+  contextRequestId += 1;
+  loadObserver?.disconnect();
+});
 </script>
 
 <template>
