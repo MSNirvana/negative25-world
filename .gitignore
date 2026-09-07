@@ -5,5 +5,7 @@ dist/
 !.env.example
 coverage/
 test-results/
+work/
+outputs/
 *.timestamp-*.mjs
 .DS_Store

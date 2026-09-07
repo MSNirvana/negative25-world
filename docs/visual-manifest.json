@@ -1,0 +1,16 @@
+{
+  "project": "negative25",
+  "content_type": "open_source_project",
+  "capture_date": "2026-09-07",
+  "source_url": "https://n25.world/",
+  "assets": [
+    {"scene_id":"home-desktop","path":"docs/media/home-desktop.png","source_url_or_path":"https://n25.world/","narration_claim":"首页按精选模式展示公开摄影作品与全局导航","target_region":"完整页面","why_this_screenshot":"证明产品入口和图库结构"},
+    {"scene_id":"discover-map-desktop","path":"docs/media/discover-map-desktop.png","source_url_or_path":"https://n25.world/discover","narration_claim":"发现模块以世界地图聚合地点照片","target_region":"地图与左侧地点面板","why_this_screenshot":"证明地图发现和地点照片路径"},
+    {"scene_id":"albums-desktop","path":"docs/media/albums-desktop.png","source_url_or_path":"https://n25.world/albums","narration_claim":"影册以封面和照片集合组织作品","target_region":"影册网格","why_this_screenshot":"证明相册浏览和照片叙事入口"},
+    {"scene_id":"register-desktop","path":"docs/media/register-desktop.png","source_url_or_path":"https://n25.world/auth/register","narration_claim":"多用户注册包含密码确认","target_region":"注册表单","why_this_screenshot":"证明多用户产品边界"},
+    {"scene_id":"home-mobile","path":"docs/media/home-mobile.png","source_url_or_path":"https://n25.world/","narration_claim":"图库在移动端采用自适应双列布局","target_region":"移动端图库","why_this_screenshot":"证明移动端响应式体验"},
+    {"scene_id":"discover-map-mobile","path":"docs/media/discover-map-mobile.png","source_url_or_path":"https://n25.world/discover","narration_claim":"发现地图在移动端保持可用","target_region":"移动端地图","why_this_screenshot":"证明窄屏地图布局"},
+    {"scene_id":"albums-mobile","path":"docs/media/albums-mobile.png","source_url_or_path":"https://n25.world/albums","narration_claim":"影册在移动端继续保持可浏览","target_region":"移动端影册","why_this_screenshot":"证明窄屏相册布局"}
+  ],
+  "redaction": "截图来自公开演示环境，不含浏览器地址栏、令牌、服务器密钥或原始上传文件。"
+}

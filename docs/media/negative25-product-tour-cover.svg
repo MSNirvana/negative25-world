@@ -1,0 +1,16 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1080 1920" role="img" aria-labelledby="title desc">
+  <title id="title">negative25 product tour cover</title>
+  <desc id="desc">A dark cover for the negative25 open source photography archive product tour.</desc>
+  <rect width="1080" height="1920" fill="#101010"/>
+  <rect x="48" y="260" width="984" height="1120" rx="12" fill="#1a1a1a" stroke="#444" stroke-width="2"/>
+  <path d="M72 1250 L1008 1250" stroke="#d43b32" stroke-width="5"/>
+  <text x="72" y="420" fill="#f4f4f0" font-family="Arial, sans-serif" font-size="58" font-weight="700">negative25</text>
+  <text x="72" y="500" fill="#f4f4f0" font-family="Arial, sans-serif" font-size="38">开源摄影档案产品导览</text>
+  <text x="72" y="575" fill="#b8b8b2" font-family="Arial, sans-serif" font-size="27">照片 · EXIF · 地图 · 影册 · 多用户</text>
+  <circle cx="910" cy="430" r="70" fill="#d43b32"/>
+  <text x="910" y="415" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="23">GitHub</text>
+  <text x="910" y="460" text-anchor="middle" fill="#fff" font-family="Arial, sans-serif" font-size="34" font-weight="700">★ 1</text>
+  <text x="72" y="1500" fill="#f4f4f0" font-family="Arial, sans-serif" font-size="34">Don't just dream it, live it.</text>
+  <text x="72" y="1560" fill="#a5a5a0" font-family="Arial, sans-serif" font-size="26">Find your negative 25.</text>
+  <text x="72" y="1810" fill="#777" font-family="Arial, sans-serif" font-size="20">Star 数为 2026-09-07 公开页面采集值</text>
+</svg>
