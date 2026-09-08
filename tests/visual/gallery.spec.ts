@@ -6,7 +6,7 @@ test.beforeEach(async ({ page }) => {
 
 test('gallery has no horizontal overflow', async ({ page }) => {
   await page.goto('/');
-  await expect(page.getByRole('region', { name: 'Photo gallery' })).toBeVisible();
+  await expect(page.locator('.gallery-page')).toBeVisible();
   expect(await page.evaluate(() => document.documentElement.scrollWidth <= document.documentElement.clientWidth)).toBe(true);
 });
 
