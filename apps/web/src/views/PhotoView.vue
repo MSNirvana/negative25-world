@@ -5,6 +5,7 @@ import PhotoViewer from '../components/PhotoViewer.vue';
 import { useGalleryStore } from '../stores/gallery';
 import { useLocale } from '../i18n';
 import { photoReturnScroll, photoReturnTarget } from '../lib/photo-return';
+import { restoreGalleryScroll } from '../lib/gallery-scroll';
 import { usePublicViewerStore } from '../stores/public-viewer';
 import { useSessionStore } from '../stores/session';
 import { useWorkspaceStore } from '../stores/workspace';
@@ -81,7 +82,7 @@ function close(): void {
   const returnScroll = photoReturnScroll(route.query.returnScroll);
   const restoreScroll = (): void => {
     if (returnScroll === undefined || typeof window === 'undefined') return;
-    void nextTick(() => { window.scrollTo({ left: 0, top: returnScroll, behavior: 'auto' }); });
+    void nextTick(() => restoreGalleryScroll(returnScroll));
   };
   if (returnTo) { void router.replace(returnTo).then(restoreScroll); return; }
   void router.push({ path: '/', query: {

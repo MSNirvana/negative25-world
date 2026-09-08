@@ -151,6 +151,39 @@ test('browser back restores the gallery scroll position after viewing a photo', 
   await expect.poll(() => page.evaluate((initial) => Math.abs(window.scrollY - initial), before)).toBeLessThanOrEqual(8);
 });
 
+test('returning from a photo keeps the cached gallery page instead of reloading its first page', async ({ page }) => {
+  const firstPage = Array.from({ length: 12 }, (_, index) => ({
+    id: `cached-${index}`,
+    spaceSlug: 'primary',
+    title: `Cached frame ${index}`,
+    description: '',
+    capturedAt: '2025-10-12T03:04:05.000Z',
+    rating: 5,
+    aspectRatio: index % 2 ? 0.8 : 1.5,
+    thumbnail: { kind: 'thumbnail', url: `https://example.com/cached-${index}.jpg`, width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  }));
+  let galleryRequests = 0;
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    galleryRequests += 1;
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: firstPage, pagination: { nextCursor: null, hasMore: false } }) });
+  });
+
+  await page.goto('/');
+  const target = page.getByRole('button', { name: 'Open Cached frame 10' });
+  await target.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+  const requestsBeforePhoto = galleryRequests;
+  await target.click();
+  await expect(page.getByRole('dialog', { name: 'Cached frame 10' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close photo' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect.poll(() => galleryRequests).toBe(requestsBeforePhoto);
+  await expect.poll(() => page.evaluate((initial) => Math.abs(window.scrollY - initial), before)).toBeLessThanOrEqual(8);
+});
+
 test('featured viewer keeps navigation and scroll position when closed', async ({ page }) => {
   await page.addInitScript(() => localStorage.setItem('negative25.session', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh', expiresIn: 3600 })));
   const photos = Array.from({ length: 18 }, (_, index) => ({
@@ -190,6 +223,33 @@ test('featured viewer keeps navigation and scroll position when closed', async (
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('button', { name: 'Open Featured scroll 12' })).toBeVisible();
   await expect.poll(() => page.evaluate((initial) => Math.abs(window.scrollY - initial), before)).toBeLessThanOrEqual(8);
+});
+
+test('gallery shows a compact back-to-top action after scrolling', async ({ page }) => {
+  const photos = Array.from({ length: 18 }, (_, index) => ({
+    id: `top-${index}`,
+    spaceSlug: 'primary',
+    title: `Top frame ${index}`,
+    description: '',
+    capturedAt: '2025-10-12T03:04:05.000Z',
+    rating: 5,
+    aspectRatio: index % 2 ? 0.8 : 1.5,
+    thumbnail: { kind: 'thumbnail', url: `https://example.com/top-${index}.jpg`, width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  }));
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos, pagination: { nextCursor: null, hasMore: false } }) });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Open Top frame 12' }).scrollIntoViewIfNeeded();
+  const backToTop = page.getByRole('button', { name: 'Back to top' });
+  await expect(backToTop).toBeVisible();
+  await backToTop.click();
+  await expect.poll(() => page.evaluate(() => window.scrollY)).toBeLessThanOrEqual(4);
+  await expect(backToTop).toHaveCount(0);
 });
 
 test('negative25 branding and canonical metadata are present', async ({ page }) => {
