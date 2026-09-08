@@ -55,6 +55,10 @@ export const useGalleryStore = defineStore('gallery', () => {
   const nextCursor = ref<string | null>(null);
   const nextCursorMode = ref<GalleryMode | null>(null);
   const activePhoto = ref<GalleryPhoto | null>(null);
+  // Keep the order that was visible when a viewer was opened. The gallery
+  // can be refreshed or paginated while the fixed viewer is open, so the
+  // current photo may temporarily disappear from `visiblePhotos`.
+  const photoNavigation = ref<GalleryPhoto[]>([]);
   const spaceSlug = ref('primary');
   const authToken = ref<string | null>(null);
   const locationCatalogLoading = ref(false);
@@ -109,6 +113,7 @@ export const useGalleryStore = defineStore('gallery', () => {
     nextCursor.value = null;
     nextCursorMode.value = null;
     activePhoto.value = null;
+    photoNavigation.value = [];
   }
   async function loadLocationCatalog(force = false): Promise<void> {
     if (!isApiConfigured()) return;
@@ -159,11 +164,29 @@ export const useGalleryStore = defineStore('gallery', () => {
       }
     }
   }
-  function openPhoto(photo: GalleryPhoto): void { activePhoto.value = photo; }
-  function closePhoto(): void { activePhoto.value = null; }
-  function findPhoto(id: string): GalleryPhoto | null { return photos.value.find((photo) => photo.id === id) ?? photoDetails.value.get(id) ?? null; }
-  function previousPhoto(): GalleryPhoto | null { const list = visiblePhotos.value; const index = list.findIndex((item) => item.id === activePhoto.value?.id); const next = index > 0 ? list[index - 1] : null; if (next) activePhoto.value = next; return next; }
-  function nextPhoto(): GalleryPhoto | null { const list = visiblePhotos.value; const index = list.findIndex((item) => item.id === activePhoto.value?.id); const next = index >= 0 && index < list.length - 1 ? list[index + 1] : null; if (next) activePhoto.value = next; return next; }
+  function openPhoto(photo: GalleryPhoto, navigation: readonly GalleryPhoto[] = visiblePhotos.value): void {
+    const seen = new Set<string>();
+    const snapshot = [...navigation, photo].filter((item) => {
+      if (seen.has(item.id)) return false;
+      seen.add(item.id);
+      return true;
+    });
+    photoNavigation.value = snapshot;
+    activePhoto.value = photo;
+  }
+  function closePhoto(): void { activePhoto.value = null; photoNavigation.value = []; }
+  function findPhoto(id: string): GalleryPhoto | null {
+    return photos.value.find((photo) => photo.id === id)
+      ?? locationPhotos.value.find((photo) => photo.id === id)
+      ?? photoDetails.value.get(id)
+      ?? photoNavigation.value.find((photo) => photo.id === id)
+      ?? null;
+  }
+  function navigationList(): GalleryPhoto[] {
+    return photoNavigation.value.length ? photoNavigation.value : visiblePhotos.value;
+  }
+  function previousPhoto(): GalleryPhoto | null { const list = navigationList(); const index = list.findIndex((item) => item.id === activePhoto.value?.id); const next = index > 0 ? list[index - 1] : null; if (next) activePhoto.value = next; return next; }
+  function nextPhoto(): GalleryPhoto | null { const list = navigationList(); const index = list.findIndex((item) => item.id === activePhoto.value?.id); const next = index >= 0 && index < list.length - 1 ? list[index + 1] : null; if (next) activePhoto.value = next; return next; }
   async function load(nextMode = mode.value, append = false): Promise<void> {
     if (!isApiConfigured()) return;
     activeRequest?.abort();
@@ -253,7 +276,7 @@ export const useGalleryStore = defineStore('gallery', () => {
       if (activePhotoRequest === controller) activePhotoRequest = null;
     }
   }
-  return { mode, selectedLocation, photos, locationPhotos, locationCatalogLoading, locationCatalogReady, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, shuffleSeed, setMode, setLocation, setContext, loadLocationCatalog, openPhoto, closePhoto, findPhoto, previousPhoto, nextPhoto, load, loadPhoto };
+  return { mode, selectedLocation, photos, locationPhotos, locationCatalogLoading, locationCatalogReady, visiblePhotos, loading, error, nextCursor, activePhoto, photoNavigation, spaceSlug, shuffleSeed, setMode, setLocation, setContext, loadLocationCatalog, openPhoto, closePhoto, findPhoto, previousPhoto, nextPhoto, load, loadPhoto };
 });
 
 function waitForGalleryRetry(signal: AbortSignal, delayMs = 160): Promise<boolean> {

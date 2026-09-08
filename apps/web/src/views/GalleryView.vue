@@ -110,7 +110,7 @@ watch(() => [gallery.mode, gallery.selectedLocation, contextReady.value, gallery
 watch(() => workspace.slug, () => { if (contextReady.value && session.authenticated) { gallery.setContext(workspace.slug, session.accessToken); void gallery.loadLocationCatalog(); void gallery.load(gallery.mode); } });
 watch(() => [session.authenticated, route.query.user, route.query.space], () => { void syncGalleryContext(); });
 function open(photo: Parameters<typeof gallery.openPhoto>[0]): void {
-  gallery.openPhoto(photo);
+  gallery.openPhoto(photo, gallery.visiblePhotos);
   void router.push({ path: `/photo/${photo.id}`, query: { ...route.query, space: gallery.spaceSlug, ...photoReturnQuery(route.fullPath) } });
 }
 function loadMore(): void { if (!gallery.nextCursor || gallery.loading) return; void gallery.load(gallery.mode, true); }

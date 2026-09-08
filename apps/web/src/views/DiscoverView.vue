@@ -25,6 +25,7 @@ const discoverPhotoCatalog = computed<GalleryPhoto[]>(() => gallery.locationPhot
 const locations = computed(() => normalizeLocations(locationRecords.value.map((location) => ({ id: location.id, name: location.name, latitude: location.latitude, longitude: location.longitude, photoIds: location.photoIds })), discoverPhotoCatalog.value));
 const unlocatedPhotos = computed(() => discoverPhotoCatalog.value.filter((photo) => !photo.coordinates));
 function openPhoto(photo: GalleryPhoto): void {
+  gallery.openPhoto(photo, discoverPhotoCatalog.value);
   void router.push({ name: 'photo', params: { id: photo.id }, query: { ...route.query, space: gallery.spaceSlug, ...photoReturnQuery(route.fullPath) } });
 }
 

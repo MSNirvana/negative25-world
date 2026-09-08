@@ -21,6 +21,30 @@ describe('gallery store', () => {
     expect(gallery.nextPhoto()).toBeNull();
   });
 
+  it('keeps viewer navigation when the active photo leaves the live gallery list', () => {
+    const gallery = useGalleryStore();
+    const navigation = gallery.visiblePhotos.slice(0, 3);
+    gallery.openPhoto(navigation[1]!, navigation);
+
+    // A refresh can replace the paginated list while the viewer remains open.
+    gallery.photos = [];
+    gallery.locationPhotos = [];
+
+    expect(gallery.findPhoto(navigation[1]!.id)?.id).toBe(navigation[1]!.id);
+    expect(gallery.previousPhoto()?.id).toBe(navigation[0]!.id);
+    gallery.openPhoto(navigation[1]!, navigation);
+    expect(gallery.nextPhoto()?.id).toBe(navigation[2]!.id);
+  });
+
+  it('deduplicates a navigation snapshot and always includes the opened photo', () => {
+    const gallery = useGalleryStore();
+    const first = gallery.visiblePhotos[0]!;
+    const second = gallery.visiblePhotos[1]!;
+    gallery.openPhoto(first, [first, second, first]);
+
+    expect(gallery.photoNavigation.map((item) => item.id)).toEqual([first.id, second.id]);
+  });
+
   it('does not duplicate photo IDs in the demo collection', () => {
     const gallery = useGalleryStore();
     expect(new Set(gallery.photos.map((photo) => photo.id)).size).toBe(gallery.photos.length);
