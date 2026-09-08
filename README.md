@@ -77,6 +77,8 @@ negative25 是一个可自托管的多用户摄影作品平台。它不只展示
 
 视频重点展示首页图库、发现地图、影册和移动端布局；截图只用于产品展示，不包含原始照片文件、账号密钥或服务器配置。
 
+![negative25 产品导览动画](docs/media/negative25-product-tour.gif)
+
 [产品导览封面](docs/media/negative25-product-tour-cover.svg) · [字幕](docs/media/negative25-product-tour.srt) · [脚本说明](docs/media/negative25-product-tour-script.md)
 
 ## 架构
