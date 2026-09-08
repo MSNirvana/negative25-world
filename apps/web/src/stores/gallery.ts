@@ -58,10 +58,16 @@ export const useGalleryStore = defineStore('gallery', () => {
   const authToken = ref<string | null>(null);
   const locationCatalogLoading = ref(false);
   const locationCatalogReady = ref(false);
+  // Details opened from an album or map may not be part of the current
+  // paginated gallery response. Keep them separate so a later gallery refresh
+  // cannot drop the photo while its viewer is still open.
+  const photoDetails = ref(new Map<string, GalleryPhoto>());
   const shuffleSeed = ref(nextShuffleSeed());
   let activeRequest: AbortController | null = null;
+  let activePhotoRequest: AbortController | null = null;
   let locationCatalogRequest: AbortController | null = null;
   let requestSequence = 0;
+  let photoRequestSequence = 0;
   let locationCatalogRequestSequence = 0;
   const visiblePhotos = computed(() => {
     let result = [...photos.value];
@@ -85,16 +91,19 @@ export const useGalleryStore = defineStore('gallery', () => {
   function setContext(nextSpaceSlug: string, token: string | null): void {
     if (spaceSlug.value === nextSpaceSlug && authToken.value === token) return;
     activeRequest?.abort();
+    activePhotoRequest?.abort();
     locationCatalogRequest?.abort();
     locationCatalogRequest = null;
     locationCatalogLoading.value = false;
     requestSequence += 1;
+    photoRequestSequence += 1;
     locationCatalogRequestSequence += 1;
     spaceSlug.value = nextSpaceSlug;
     authToken.value = token;
     photos.value = isApiConfigured() ? [] : demoPhotos;
     locationPhotos.value = isApiConfigured() ? [] : demoPhotos;
     locationCatalogReady.value = false;
+    photoDetails.value = new Map();
     nextCursor.value = null;
     nextCursorMode.value = null;
     activePhoto.value = null;
@@ -150,6 +159,7 @@ export const useGalleryStore = defineStore('gallery', () => {
   }
   function openPhoto(photo: GalleryPhoto): void { activePhoto.value = photo; }
   function closePhoto(): void { activePhoto.value = null; }
+  function findPhoto(id: string): GalleryPhoto | null { return photos.value.find((photo) => photo.id === id) ?? photoDetails.value.get(id) ?? null; }
   function previousPhoto(): GalleryPhoto | null { const list = visiblePhotos.value; const index = list.findIndex((item) => item.id === activePhoto.value?.id); const next = index > 0 ? list[index - 1] : null; if (next) activePhoto.value = next; return next; }
   function nextPhoto(): GalleryPhoto | null { const list = visiblePhotos.value; const index = list.findIndex((item) => item.id === activePhoto.value?.id); const next = index >= 0 && index < list.length - 1 ? list[index + 1] : null; if (next) activePhoto.value = next; return next; }
   async function load(nextMode = mode.value, append = false): Promise<void> {
@@ -184,6 +194,11 @@ export const useGalleryStore = defineStore('gallery', () => {
             continue;
           }
           const mergedPhotos = append ? [...photos.value, ...incoming.filter((photo) => !photos.value.some((existing) => existing.id === photo.id))] : incoming;
+          if (incoming.length) {
+            const nextDetails = new Map(photoDetails.value);
+            for (const photo of incoming) nextDetails.set(photo.id, photo);
+            photoDetails.value = nextDetails;
+          }
           photos.value = mergedPhotos;
           nextCursor.value = response.pagination.nextCursor;
           nextCursorMode.value = nextMode;
@@ -208,22 +223,35 @@ export const useGalleryStore = defineStore('gallery', () => {
       }
     }
   }
-  async function loadPhoto(id: string): Promise<GalleryPhoto | null> {
+  async function loadPhoto(id: string, signal?: AbortSignal): Promise<GalleryPhoto | null> {
     if (!isApiConfigured()) return null;
-    loading.value = true;
-    error.value = null;
+    activePhotoRequest?.abort();
+    const controller = new AbortController();
+    const requestId = ++photoRequestSequence;
+    const requestSpaceSlug = spaceSlug.value;
+    const requestToken = authToken.value;
+    const isCurrentRequest = (): boolean => !controller.signal.aborted
+      && requestId === photoRequestSequence
+      && spaceSlug.value === requestSpaceSlug
+      && authToken.value === requestToken;
+    const abortRequest = (): void => controller.abort();
+    signal?.addEventListener('abort', abortRequest, { once: true });
+    if (signal?.aborted) controller.abort();
+    activePhotoRequest = controller;
     try {
-      const result = toGalleryPhoto(await fetchPhoto(id, undefined, spaceSlug.value, authToken.value));
-      if (!photos.value.some((photo) => photo.id === result.id)) photos.value.push(result);
+      const result = toGalleryPhoto(await fetchPhoto(id, controller.signal, requestSpaceSlug, requestToken));
+      if (!isCurrentRequest()) return null;
+      photoDetails.value = new Map(photoDetails.value).set(result.id, result);
       return result;
     } catch (cause) {
-      error.value = cause instanceof Error ? cause.message : t('photo.loadError');
+      if (!controller.signal.aborted && isCurrentRequest()) error.value = cause instanceof Error ? cause.message : t('photo.loadError');
       return null;
     } finally {
-      loading.value = false;
+      signal?.removeEventListener('abort', abortRequest);
+      if (activePhotoRequest === controller) activePhotoRequest = null;
     }
   }
-  return { mode, selectedLocation, photos, locationPhotos, locationCatalogLoading, locationCatalogReady, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, shuffleSeed, setMode, setLocation, setContext, loadLocationCatalog, openPhoto, closePhoto, previousPhoto, nextPhoto, load, loadPhoto };
+  return { mode, selectedLocation, photos, locationPhotos, locationCatalogLoading, locationCatalogReady, visiblePhotos, loading, error, nextCursor, activePhoto, spaceSlug, shuffleSeed, setMode, setLocation, setContext, loadLocationCatalog, openPhoto, closePhoto, findPhoto, previousPhoto, nextPhoto, load, loadPhoto };
 });
 
 function waitForGalleryRetry(signal: AbortSignal, delayMs = 160): Promise<boolean> {

@@ -1,14 +1,15 @@
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { createPinia, setActivePinia } from 'pinia';
 
-const { fetchGalleryMock, isApiConfiguredMock } = vi.hoisted(() => ({
+const { fetchGalleryMock, fetchPhotoMock, isApiConfiguredMock } = vi.hoisted(() => ({
   fetchGalleryMock: vi.fn(),
+  fetchPhotoMock: vi.fn(),
   isApiConfiguredMock: vi.fn(() => true),
 }));
 
 vi.mock('../api/client', () => ({
   fetchGallery: fetchGalleryMock,
-  fetchPhoto: vi.fn(),
+  fetchPhoto: fetchPhotoMock,
   isApiConfigured: isApiConfiguredMock,
 }));
 
@@ -38,6 +39,7 @@ describe('gallery loading', () => {
   beforeEach(() => {
     setActivePinia(createPinia());
     fetchGalleryMock.mockReset();
+    fetchPhotoMock.mockReset();
     isApiConfiguredMock.mockReturnValue(true);
   });
 
@@ -74,5 +76,21 @@ describe('gallery loading', () => {
 
     expect(gallery.photos.map((item) => item.id)).toEqual(['recent-photo']);
     expect(gallery.error).toBeNull();
+  });
+
+  it('keeps a direct photo detail when a gallery refresh finishes afterward', async () => {
+    let resolveGallery!: (value: ReturnType<typeof response>) => void;
+    const galleryRequest = new Promise<ReturnType<typeof response>>((resolve) => { resolveGallery = resolve; });
+    fetchGalleryMock.mockReturnValue(galleryRequest);
+    fetchPhotoMock.mockResolvedValue(response(photo('album-only-photo')).photos[0]);
+
+    const gallery = useGalleryStore();
+    const galleryLoad = gallery.load('featured');
+    await gallery.loadPhoto('album-only-photo');
+    resolveGallery(response(photo('featured-photo')));
+    await galleryLoad;
+
+    expect(gallery.photos.map((item) => item.id)).toEqual(['featured-photo']);
+    expect(gallery.findPhoto('album-only-photo')?.id).toBe('album-only-photo');
   });
 });

@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import { computed, onMounted } from 'vue';
+import { computed, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PhotoViewer from '../components/PhotoViewer.vue';
 import { useGalleryStore } from '../stores/gallery';
@@ -17,20 +17,38 @@ const publicViewer = usePublicViewerStore();
 const session = useSessionStore();
 const workspace = useWorkspaceStore();
 const { t } = useLocale();
-const photo = computed(() => gallery.photos.find((item) => item.id === props.id) ?? null);
+const photo = computed(() => gallery.findPhoto(props.id));
 const previous = computed(() => { if (!photo.value) return null; const index = gallery.visiblePhotos.findIndex((item) => item.id === photo.value?.id); return index > 0 ? gallery.visiblePhotos[index - 1] : null; });
 const next = computed(() => { if (!photo.value) return null; const index = gallery.visiblePhotos.findIndex((item) => item.id === photo.value?.id); return index >= 0 ? gallery.visiblePhotos[index + 1] ?? null : null; });
-onMounted(async () => {
+const photoLoading = ref(true);
+let photoRequestId = 0;
+let activePhotoRequest: AbortController | null = null;
+
+async function syncPhoto(): Promise<void> {
+  const requestId = ++photoRequestId;
+  activePhotoRequest?.abort();
+  const controller = new AbortController();
+  activePhotoRequest = controller;
+  photoLoading.value = true;
+  const isCurrentRequest = (): boolean => !controller.signal.aborted && requestId === photoRequestId;
   const username = typeof route.query.user === 'string' ? route.query.user : null;
   const profile = username ? await publicViewer.load(username) : null;
+  if (!isCurrentRequest()) return;
   const requestedSpace = typeof route.query.space === 'string' && route.query.space.trim()
     ? route.query.space.trim()
     : null;
-  // Public profile context is authoritative. For direct links without a
-  // profile, use the workspace carried by the link instead of falling back to
-  // primary, which would make personal-archive photos look missing on reload.
-  if (profile?.workspaceSlug) gallery.setContext(profile.workspaceSlug, null);
-  else if (requestedSpace) {
+  // Public profile context is authoritative. Direct links without a profile
+  // use the workspace carried by the link instead of a primary fallback.
+  if (username) {
+    // A username is authoritative. Do not fall back to a stale workspace if
+    // the public profile cannot be resolved.
+    if (!profile?.workspaceSlug) {
+      gallery.setContext('primary', null);
+      photoLoading.value = false;
+      return;
+    }
+    gallery.setContext(profile.workspaceSlug, null);
+  } else if (requestedSpace) {
     // Only send an authenticated request for a workspace the current account
     // actually belongs to. Public links opened while signed in must remain
     // readable instead of being rejected by another workspace's ACL.
@@ -41,7 +59,21 @@ onMounted(async () => {
     }
     gallery.setContext(requestedSpace, token);
   }
-  if (!photo.value) void gallery.loadPhoto(props.id);
+  if (!isCurrentRequest()) return;
+  if (photo.value) {
+    photoLoading.value = false;
+    if (activePhotoRequest === controller) activePhotoRequest = null;
+    return;
+  }
+  await gallery.loadPhoto(props.id, controller.signal);
+  if (isCurrentRequest()) photoLoading.value = false;
+  if (activePhotoRequest === controller) activePhotoRequest = null;
+}
+
+watch(() => [props.id, route.query.user, route.query.space] as const, () => { void syncPhoto(); }, { immediate: true });
+onBeforeUnmount(() => {
+  photoRequestId += 1;
+  activePhotoRequest?.abort();
 });
 function close(): void {
   const returnTo = photoReturnTarget(route.query.returnTo);
@@ -66,7 +98,7 @@ function goNext(): void { if (next.value) void router.replace({ name: 'photo', p
 
 <template>
   <PhotoViewer v-if="photo" :photo="photo" :previous="previous" :next="next" @close="close" @previous="goPrevious" @next="goNext" />
-  <main v-else-if="gallery.loading" class="not-found page-frame"><span class="eyebrow">{{ t('photo.loading') }}</span><h1>{{ t('photo.loading') }}</h1></main>
+  <main v-else-if="photoLoading" class="not-found page-frame"><span class="eyebrow">{{ t('photo.loading') }}</span><h1>{{ t('photo.loading') }}</h1></main>
   <main v-else class="not-found page-frame"><span class="eyebrow">404</span><h1>{{ t('photo.notFound') }}</h1><button @click="close">{{ t('photo.backGallery') }}</button></main>
 </template>
 

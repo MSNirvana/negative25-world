@@ -60,6 +60,67 @@ test('photo detail reloads from the workspace carried by its URL', async ({ page
   await expect(page).toHaveURL(/\/?mode=featured&space=u-personal-archive$/);
 });
 
+test('photo detail loads an album photo that is outside the current gallery page', async ({ page }) => {
+  const albumId = 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaaa';
+  const photo = {
+    id: 'album-only-photo',
+    spaceSlug: 'primary',
+    title: 'Album-only frame',
+    description: 'A photo loaded from an album detail route',
+    capturedAt: '2026-01-02T03:04:05.000Z',
+    rating: 7,
+    aspectRatio: 1.5,
+    thumbnail: { kind: 'thumbnail', url: 'https://example.com/album-only.jpg', width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  };
+  await page.route(`**/api/v1/spaces/primary/albums/${albumId}`, async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: albumId, spaceSlug: 'primary', title: 'Album route', shootDate: '2026-01-02', cover: photo, photoCount: 1, photos: [photo] }) });
+  });
+  await page.route('**/api/v1/spaces/primary/albums', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ albums: [{ id: albumId, spaceSlug: 'primary', title: 'Album route', shootDate: '2026-01-02', cover: photo, photoCount: 1 }] }) });
+  });
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos: [], pagination: { nextCursor: null, hasMore: false } }) });
+  });
+  await page.route('**/api/v1/photos/album-only-photo', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(photo) });
+  });
+
+  await page.goto('/');
+  await page.getByRole('button', { name: 'Albums' }).click();
+  await expect(page.getByRole('button', { name: 'Expand album Album route' })).toBeVisible();
+  await page.getByRole('button', { name: 'Expand album Album route' }).click();
+  await page.getByRole('button', { name: 'Open Album-only frame' }).click();
+  await expect(page.getByRole('dialog', { name: 'Album-only frame' })).toBeVisible();
+});
+
+test('photo detail reloads in the public user workspace', async ({ page }) => {
+  const photo = {
+    id: 'public-user-photo',
+    spaceSlug: 'viewer-archive',
+    title: 'Public user frame',
+    description: 'A frame from a public user archive',
+    capturedAt: '2026-01-02T03:04:05.000Z',
+    rating: 6,
+    aspectRatio: 1.5,
+    thumbnail: { kind: 'thumbnail', url: 'https://example.com/public-user.jpg', width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  };
+  await page.route('**/api/v1/users/viewer/profile', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ username: 'viewer', displayName: 'Viewer', bio: null, location: null, avatarMediaId: null, websiteUrl: null, instagramUrl: null, weiboUrl: null, profilePublic: true, workspaceSlug: 'viewer-archive', photos: [] }) });
+  });
+  await page.route('**/api/v1/spaces/viewer-archive/photos/public-user-photo', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify(photo) });
+  });
+
+  await page.goto('/photo/public-user-photo?user=viewer');
+  await expect(page.getByRole('dialog', { name: 'Public user frame' })).toBeVisible();
+});
+
 test('browser back restores the gallery scroll position after viewing a photo', async ({ page }) => {
   const photos = Array.from({ length: 18 }, (_, index) => ({
     id: `scroll-${index}`,
