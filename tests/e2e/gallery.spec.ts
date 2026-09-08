@@ -33,7 +33,7 @@ test('gallery opens a photo detail view', async ({ page }) => {
   await page.goto('http://127.0.0.1:5173/');
   await expect(page.getByRole('heading', { name: 'Featured work' })).toBeVisible();
   await page.getByRole('button', { name: 'Open Alpine light' }).click();
-  await expect(page).toHaveURL(/\/photo\/44444444-4444-4444-8444-444444444444\?space=primary$/);
+  await expect(page).toHaveURL(/\/photo\/44444444-4444-4444-8444-444444444444\?space=primary&returnTo=\/&returnScroll=\d+$/);
   await expect(page.getByRole('dialog', { name: 'Alpine light' })).toBeVisible();
 });
 
@@ -148,6 +148,47 @@ test('browser back restores the gallery scroll position after viewing a photo', 
   await page.goBack();
   await expect(page).toHaveURL(/\/$/);
   await expect(page.getByRole('button', { name: 'Open Scroll frame 12' })).toBeVisible();
+  await expect.poll(() => page.evaluate((initial) => Math.abs(window.scrollY - initial), before)).toBeLessThanOrEqual(8);
+});
+
+test('featured viewer keeps navigation and scroll position when closed', async ({ page }) => {
+  await page.addInitScript(() => localStorage.setItem('negative25.session', JSON.stringify({ accessToken: 'test-token', refreshToken: 'test-refresh', expiresIn: 3600 })));
+  const photos = Array.from({ length: 18 }, (_, index) => ({
+    id: `featured-scroll-${index}`,
+    spaceSlug: 'primary',
+    title: `Featured scroll ${index}`,
+    description: '',
+    capturedAt: '2025-10-12T03:04:05.000Z',
+    rating: 7 - (index % 7),
+    aspectRatio: index % 2 ? 0.8 : 1.5,
+    thumbnail: { kind: 'thumbnail', url: `https://example.com/featured-scroll-${index}.jpg`, width: 900, height: 600, format: 'jpeg' },
+    media: [],
+    location: null,
+    metadata: {},
+  }));
+  await page.route('**/api/v1/auth/me', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ id: 'user-1', username: 'owner', email: 'owner@n25.world', name: 'Owner', emailVerifiedAt: null }) });
+  });
+  await page.route('**/api/v1/workspaces', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify([{ id: 'workspace-1', slug: 'primary', name: 'negative25', role: 'owner' }]) });
+  });
+  await page.route('**/api/v1/spaces/primary/photos*', async (route) => {
+    await route.fulfill({ status: 200, contentType: 'application/json', body: JSON.stringify({ photos, pagination: { nextCursor: null, hasMore: false } }) });
+  });
+
+  await page.goto('/');
+  const target = page.getByRole('button', { name: 'Open Featured scroll 12' });
+  await target.scrollIntoViewIfNeeded();
+  const before = await page.evaluate(() => window.scrollY);
+  expect(before).toBeGreaterThan(0);
+  await target.click();
+  await expect(page.getByRole('dialog', { name: 'Featured scroll 12' })).toBeVisible();
+  await expect(page.getByRole('button', { name: 'Next photo' })).toBeEnabled();
+  await page.keyboard.press('ArrowRight');
+  await expect(page.getByRole('dialog', { name: 'Featured scroll 13' })).toBeVisible();
+  await page.getByRole('button', { name: 'Close photo' }).click();
+  await expect(page).toHaveURL(/\/$/);
+  await expect(page.getByRole('button', { name: 'Open Featured scroll 12' })).toBeVisible();
   await expect.poll(() => page.evaluate((initial) => Math.abs(window.scrollY - initial), before)).toBeLessThanOrEqual(8);
 });
 

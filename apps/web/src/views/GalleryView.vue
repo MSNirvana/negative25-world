@@ -12,6 +12,7 @@ import { useSessionStore } from '../stores/session';
 import { useWorkspaceStore } from '../stores/workspace';
 import { usePublicViewerStore } from '../stores/public-viewer';
 import type { AlbumDetail } from '@negative25/contracts';
+import { photoReturnQuery } from '../lib/photo-return';
 
 defineOptions({ name: 'GalleryView' });
 
@@ -64,7 +65,7 @@ async function syncGalleryContext(): Promise<void> {
       if (requestId !== contextRequestId) return;
       if (workspace.spaces.some((item) => item.slug === requestedSpace)) token = session.accessToken;
     }
-    gallery.setContext(requestedSpace, token);
+    gallery.setContext(requestedSpace, token, { preserveExistingToken: requestedSpace === gallery.spaceSlug });
     markContextReady();
     return;
   }
@@ -110,7 +111,7 @@ watch(() => workspace.slug, () => { if (contextReady.value && session.authentica
 watch(() => [session.authenticated, route.query.user, route.query.space], () => { void syncGalleryContext(); });
 function open(photo: Parameters<typeof gallery.openPhoto>[0]): void {
   gallery.openPhoto(photo);
-  void router.push({ path: `/photo/${photo.id}`, query: { ...route.query, space: gallery.spaceSlug } });
+  void router.push({ path: `/photo/${photo.id}`, query: { ...route.query, space: gallery.spaceSlug, ...photoReturnQuery(route.fullPath) } });
 }
 function loadMore(): void { if (!gallery.nextCursor || gallery.loading) return; void gallery.load(gallery.mode, true); }
 function openAlbumPhoto(photo: Parameters<typeof gallery.openPhoto>[0]): void { open(photo); }

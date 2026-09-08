@@ -1,10 +1,10 @@
 <script setup lang="ts">
-import { computed, onBeforeUnmount, ref, watch } from 'vue';
+import { computed, nextTick, onBeforeUnmount, ref, watch } from 'vue';
 import { useRoute, useRouter } from 'vue-router';
 import PhotoViewer from '../components/PhotoViewer.vue';
 import { useGalleryStore } from '../stores/gallery';
 import { useLocale } from '../i18n';
-import { photoReturnTarget } from '../lib/photo-return';
+import { photoReturnScroll, photoReturnTarget } from '../lib/photo-return';
 import { usePublicViewerStore } from '../stores/public-viewer';
 import { useSessionStore } from '../stores/session';
 import { useWorkspaceStore } from '../stores/workspace';
@@ -57,7 +57,7 @@ async function syncPhoto(): Promise<void> {
       await workspace.load(session.accessToken);
       if (workspace.spaces.some((item) => item.slug === requestedSpace)) token = session.accessToken;
     }
-    gallery.setContext(requestedSpace, token);
+    gallery.setContext(requestedSpace, token, { preserveExistingToken: requestedSpace === gallery.spaceSlug });
   }
   if (!isCurrentRequest()) return;
   if (photo.value) {
@@ -77,19 +77,25 @@ onBeforeUnmount(() => {
 });
 function close(): void {
   const returnTo = photoReturnTarget(route.query.returnTo);
-  if (returnTo) { void router.replace(returnTo); return; }
+  const returnScroll = photoReturnScroll(route.query.returnScroll);
+  const restoreScroll = (): void => {
+    if (returnScroll === undefined || typeof window === 'undefined') return;
+    void nextTick(() => { window.scrollTo({ left: 0, top: returnScroll, behavior: 'auto' }); });
+  };
+  if (returnTo) { void router.replace(returnTo).then(restoreScroll); return; }
   void router.push({ path: '/', query: {
     mode: gallery.mode,
     ...(route.query.user ? { user: route.query.user } : {}),
     ...(route.query.space ? { space: String(route.query.space) } : {}),
-  } });
+  } }).then(restoreScroll);
 }
-function photoQuery(): { returnTo?: string } {
+function photoQuery(): { returnTo?: string; returnScroll?: string } {
   const returnTo = photoReturnTarget(route.query.returnTo);
   return {
     ...(route.query.user ? { user: String(route.query.user) } : {}),
     ...(route.query.space ? { space: String(route.query.space) } : {}),
     ...(returnTo ? { returnTo } : {}),
+    ...(route.query.returnScroll ? { returnScroll: String(route.query.returnScroll) } : {}),
   };
 }
 function goPrevious(): void { if (previous.value) void router.replace({ name: 'photo', params: { id: previous.value.id }, query: photoQuery() }); }

@@ -32,6 +32,7 @@ export type GalleryPhoto = {
   coordinates?: PhotoCoordinates;
   altitude?: number;
 };
+export type GalleryContextOptions = { preserveExistingToken?: boolean };
 
 const demoPhotos: GalleryPhoto[] = [
   { id: 'alpine-light', title: 'Alpine light', caption: 'Quiet light across the high country', capturedAt: '12 Oct 2025', location: 'Dolomites, Italy', aspectRatio: 1.5, image: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=1600&q=88', fullImage: 'https://images.unsplash.com/photo-1519681393784-d120267933ba?auto=format&fit=crop&w=2400&q=92', tone: '#bdc9d0', camera: 'Leica Q3', lens: '28mm Summilux', focalLength: '28mm', aperture: 'f/1.7', shutterSpeed: '1/500s', iso: 'ISO 100', rating: 6 },
@@ -88,7 +89,8 @@ export const useGalleryStore = defineStore('gallery', () => {
     }
   }
   function setLocation(next: string | null): void { selectedLocation.value = next; }
-  function setContext(nextSpaceSlug: string, token: string | null): void {
+  function setContext(nextSpaceSlug: string, token: string | null, options: GalleryContextOptions = {}): void {
+    if (options.preserveExistingToken && spaceSlug.value === nextSpaceSlug && !token && authToken.value) return;
     if (spaceSlug.value === nextSpaceSlug && authToken.value === token) return;
     activeRequest?.abort();
     activePhotoRequest?.abort();
