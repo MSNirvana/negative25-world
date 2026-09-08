@@ -8,6 +8,16 @@ describe('masonry columns', () => {
     expect(buildMasonryColumns([], 1280)).toEqual([]);
   });
 
+  it('keeps sparse galleries at the same responsive item width as full galleries', () => {
+    const single = buildMasonryColumns([photo('single', 1.5)], 1600, 12);
+    const sparse = buildMasonryColumns([photo('a', 1.5), photo('b', 0.8), photo('c', 2)], 1600, 12);
+
+    expect(single).toHaveLength(4);
+    expect(single.map((column) => column.photos.length)).toEqual([1, 0, 0, 0]);
+    expect(sparse).toHaveLength(4);
+    expect(sparse.map((column) => column.photos.length)).toEqual([1, 1, 1, 0]);
+  });
+
   it('balances different photo proportions across the shortest columns', () => {
     const columns = buildMasonryColumns([photo('wide', 1.5), photo('portrait', 0.5), photo('square', 1), photo('tall', 0.7)], 1000, 12);
     expect(columns.map((column) => column.photos.map((item) => item.id))).toEqual([['wide', 'tall'], ['portrait'], ['square']]);

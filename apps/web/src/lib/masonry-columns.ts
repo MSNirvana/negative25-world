@@ -48,7 +48,8 @@ function addPhoto<T extends Pick<MasonryPhoto, 'aspectRatio'>>(columns: MasonryC
 }
 
 export function buildMasonryColumns<T extends MasonryPhoto>(photos: readonly T[], width: number, gap = masonryGapForWidth(width)): MasonryColumn<T>[] {
-  const count = Math.min(masonryColumnCountForWidth(width), photos.length);
+  if (!photos.length) return [];
+  const count = masonryColumnCountForWidth(width);
   const columns = Array.from({ length: count }, (_, index) => ({ index, photos: [], height: 0 })) as MasonryColumn<T>[];
   for (const photo of photos) addPhoto(columns, photo, width, gap);
   return columns;

@@ -443,7 +443,7 @@ test('location mode opens a searchable picker and filters the gallery', async ({
   const [singleCellBox, singleGridBox] = await Promise.all([singlePhotoCell.boundingBox(), page.locator('.photo-grid').boundingBox()]);
   expect(singleCellBox).not.toBeNull();
   expect(singleGridBox).not.toBeNull();
-  expect((singleCellBox?.width ?? 0) / (singleGridBox?.width ?? 1)).toBeCloseTo(1, 1);
+  expect((singleCellBox?.width ?? 0) / (singleGridBox?.width ?? 1)).toBeLessThan(0.5);
   await page.getByRole('button', { name: 'Region' }).click();
   const beijingPicker = page.getByRole('dialog', { name: 'Choose a location' });
   await beijingPicker.getByRole('option', { name: 'Beijing' }).click();
