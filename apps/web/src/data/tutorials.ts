@@ -23,7 +23,26 @@ export type Tutorial = {
 };
 
 const text = (zh: string, en: string): LocalizedText => ({ zh, en });
-const image = (id: string, width = 1800): string => `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=88`;
+const localImages: Record<string, string> = {
+  'photo-1433086966358-54859d0ed716': '/tutorials/scenes/scene-water.jpg',
+  'photo-1464822759023-fed622ff2c3b': '/tutorials/scenes/mountain-valley.jpg',
+  'photo-1470252649378-9c29740c9fa8': '/tutorials/scenes/scene-sunset.jpg',
+  'photo-1494438639946-1ebd1d20bf85': '/tutorials/scenes/scene-tabletop.jpg',
+  'photo-1494526585095-c41746248156': '/tutorials/scenes/scene-traffic.jpg',
+  'photo-1495705227294-e823a9b4c92d': '/tutorials/scenes/gear-z50ii.jpg',
+  'photo-1497250681960-ef046c08a56e': '/tutorials/scenes/scene-foliage.jpg',
+  'photo-1500530855697-b586d89ba3ee': '/tutorials/scenes/mountain-valley.jpg',
+  'photo-1506794778202-cad84cf45f1d': '/tutorials/scenes/gear-flash.jpg',
+  'photo-1515886657613-9f3515b0c78f': '/tutorials/scenes/scene-portrait.jpg',
+  'photo-1516035069371-29a1b244cc32': '/tutorials/scenes/gear-z6iii.jpg',
+  'photo-1518709268805-4e9042af9f23': '/tutorials/scenes/scene-tabletop.jpg',
+  'photo-1519608487953-e999c86e7455': '/tutorials/scenes/scene-traffic.jpg',
+  'photo-1519681393784-d120267933ba': '/tutorials/scenes/scene-milky-way.jpg',
+  'photo-1444703686981-a3abbc4d4fe3': '/tutorials/scenes/gear-gfx100s.jpg',
+  'photo-1449844908441-8829872d2607': '/tutorials/scenes/mountain-valley.jpg',
+  'photo-1470770841072-f978cf4d019e': '/tutorials/scenes/gear-tripod.jpg',
+};
+const image = (id: string, width = 1800): string => localImages[id] ?? `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=88`;
 
 export const tutorials: Tutorial[] = [
   {
@@ -157,3 +176,137 @@ export function formatLabel(format: TutorialFormat, locale: TutorialLocale): str
   const labels: Record<TutorialFormat, LocalizedText> = { interactive: text('互动演示', 'Interactive'), comparison: text('图片对比', 'Comparison'), workflow: text('拍摄流程', 'Workflow') };
   return localized(labels[format], locale);
 }
+
+export type GearCategory = 'body' | 'lens' | 'support' | 'light' | 'filter';
+export type GearItem = {
+  id: string;
+  category: GearCategory;
+  title: LocalizedText;
+  subtitle: LocalizedText;
+  summary: LocalizedText;
+  useCases: LocalizedText[];
+  image: string;
+};
+
+export const gearCategories: GearCategory[] = ['body', 'lens', 'support', 'light', 'filter'];
+export const gearCategoryLabel = (category: GearCategory, locale: TutorialLocale): string => ({
+  zh: { body: '机身', lens: '镜头', support: '支撑与周边', light: '光线', filter: '滤镜' },
+  en: { body: 'Bodies', lens: 'Lenses', support: 'Support & accessories', light: 'Light', filter: 'Filters' },
+}[locale][category]);
+
+export const gearItems: GearItem[] = [
+  {
+    id: 'full-frame', category: 'body', title: text('全画幅相机', 'Full-frame camera'), subtitle: text('Nikon Z6 III / Z8', 'Nikon Z6 III / Z8'),
+    summary: text('在画质、景深和高感之间取得平衡，适合一台机身覆盖大多数拍摄。', 'A balanced choice for image quality, depth of field, and low-light flexibility.'),
+    useCases: [text('旅行与日常记录：高感干净，暗部有余量。', 'Travel and everyday work: clean high ISO and shadow latitude.'), text('人像与夜景：更容易获得浅景深和自然的空间层次。', 'Portraits and night scenes: easier shallow depth and natural separation.')],
+    image: image('photo-1516035069371-29a1b244cc32'),
+  },
+  {
+    id: 'aps-c', category: 'body', title: text('半画幅相机', 'APS-C camera'), subtitle: text('Nikon Z50 II / Fujifilm X 系列', 'Nikon Z50 II / Fujifilm X series'),
+    summary: text('机身和镜头更轻，等效焦距更长，适合边走边拍和预算有限的第一台相机。', 'Lighter bodies, extra reach, and a practical first interchangeable-lens system.'),
+    useCases: [text('街头与旅行：轻便，愿意随身带出去才是最大的优势。', 'Street and travel: light enough to carry every day.'), text('远摄入门：同样的镜头可以得到更长的等效视角。', 'Telephoto learning: the same lens gives you more equivalent reach.')],
+    image: image('photo-1495705227294-e823a9b4c92d'),
+  },
+  {
+    id: 'medium-format', category: 'body', title: text('中画幅相机', 'Medium-format camera'), subtitle: text('Fujifilm GFX 100S II', 'Fujifilm GFX 100S II'),
+    summary: text('更大的传感器带来细腻层次和宽容度，适合把静态主体拍到极致。', 'A larger sensor offers fine tonal detail and latitude for deliberate, static work.'),
+    useCases: [text('风光与建筑：大尺寸输出、细节丰富，适合慢下来构图。', 'Landscape and architecture: rich detail for large prints.'), text('商业与肖像：肤色和过渡细腻，但需要更稳定的拍摄节奏。', 'Commercial and portrait work: delicate transitions, with a slower workflow.')],
+    image: image('photo-1444703686981-a3abbc4d4fe3'),
+  },
+  {
+    id: 'z100-400', category: 'lens', title: text('NIKKOR Z 100-400mm', 'NIKKOR Z 100-400mm'), subtitle: text('远处雪景、山峰与动物', 'Distant snow, peaks, and wildlife'),
+    summary: text('把远处的层次压缩到一起，站在安全距离也能把山峰和雪线拍得有力量。', 'Compress distant layers and fill the frame from a safe distance.'),
+    useCases: [text('远处雪景：把山脊、雪线和光影压在同一张画面里。', 'Distant snow: layer ridges, snow lines, and light.'), text('山峰与动物：减少靠近主体的需要，等待更好的光线。', 'Peaks and wildlife: stay back and wait for better light.')],
+    image: image('photo-1464822759023-fed622ff2c3b'),
+  },
+  {
+    id: 'z14-24', category: 'lens', title: text('NIKKOR Z 14-24mm f/2.8', 'NIKKOR Z 14-24mm f/2.8'), subtitle: text('大景、建筑与星空', 'Big scenes, architecture, and stars'),
+    summary: text('把环境放进来，同时用前景制造空间纵深，适合需要“交代现场”的画面。', 'Keep the environment while using foreground to create depth.'),
+    useCases: [text('大景与建筑：容纳更多现场信息，注意边缘的线条和人物比例。', 'Big scenes and architecture: include context, while watching edges and proportions.'), text('星空：更容易把银河、地景和前景放在同一构图里。', 'Stars: fit the Milky Way, landscape, and foreground together.')],
+    image: image('photo-1500530855697-b586d89ba3ee'),
+  },
+  {
+    id: 'z50-18', category: 'lens', title: text('NIKKOR Z 50mm f/1.8', 'NIKKOR Z 50mm f/1.8'), subtitle: text('人像、街头与生活', 'Portraits, streets, and life'),
+    summary: text('视角自然、光圈明亮，适合练习靠近主体、观察光线和建立关系。', 'A natural view and bright aperture for practising proximity, light, and connection.'),
+    useCases: [text('人像：保持自然比例，开大光圈让背景安静下来。', 'Portraits: natural proportions with a quieter background.'), text('街头与生活：不夸张、不疏离，适合边走边观察。', 'Street and life: close to how the eye reads an everyday scene.')],
+    image: image('photo-1515886657613-9f3515b0c78f'),
+  },
+  {
+    id: 'tripod', category: 'support', title: text('三脚架', 'Tripod'), subtitle: text('长曝光、光轨、星空与水流', 'Long exposure, trails, stars, and water'),
+    summary: text('它把相机固定下来，让你可以降低 ISO、延长快门，并且重复拍摄同一个机位。', 'It locks the camera so you can lower ISO, lengthen the shutter, and repeat a frame.'),
+    useCases: [text('光轨与车轨：让建筑不动，只让车灯留下线条。', 'Light and car trails: keep buildings still while headlights draw lines.'), text('星空与水流：获得更长曝光，保留细节和连续的运动感。', 'Stars and water: use longer exposures for detail and continuous motion.'), text('HDR、像素移位、焦点合成：所有需要多张对齐的工作。', 'HDR, pixel shift, and focus stacking: any multi-frame alignment.')],
+    image: image('photo-1470770841072-f978cf4d019e'),
+  },
+  {
+    id: 'anti-dew', category: 'support', title: text('除雾带', 'Dew heater strap'), subtitle: text('潮湿夜晚与长时间星空', 'Humid nights and long star sessions'),
+    summary: text('镜头前组一旦起雾，后面拍得再稳都没有意义；除雾带是低温潮湿环境的保险。', 'A fogged front element ruins a stable session; a dew strap protects long, humid shoots.'),
+    useCases: [text('星空：夜间温度下降时，持续给镜头前组保持一点温度。', 'Stars: keep the front element just warm enough as temperatures fall.'), text('山谷、海边和清晨：提前装好，避免反复擦镜片带来的震动。', 'Valleys, coasts, and dawn: prevent repeated wiping and vibration.')],
+    image: image('photo-1519681393784-d120267933ba'),
+  },
+  {
+    id: 'intervalometer', category: 'support', title: text('间隔拍摄器', 'Intervalometer'), subtitle: text('延时摄影与长时间记录', 'Time-lapse and long records'),
+    summary: text('把每一次曝光的时间交给设备，摄影师只需要观察变化并保证机位稳定。', 'Automate each exposure so you can watch the change and protect the frame.'),
+    useCases: [text('日落与云层：按固定间隔记录光线变化。', 'Sunsets and clouds: record changing light at a fixed interval.'), text('植物、生长与城市：把几小时的变化压缩成可阅读的序列。', 'Plants, growth, and cities: turn hours into a readable sequence.')],
+    image: image('photo-1470252649378-9c29740c9fa8'),
+  },
+  {
+    id: 'flash', category: 'light', title: text('闪光灯', 'Flash'), subtitle: text('人像补光、室内与小型静物', 'Portrait fill, interiors, and still life'),
+    summary: text('闪光灯不是“把画面打亮”，而是主动决定光线从哪里来、阴影落在哪里。', 'Flash is not just brightness; it decides where light comes from and where shadows fall.'),
+    useCases: [text('人像：从侧面或侧后方补光，让脸部和轮廓分开。', 'Portraits: add side or rim light to separate face and outline.'), text('室内与静物：压住环境光变化，重复得到稳定结果。', 'Interiors and still life: control changing ambient light for repeatable results.')],
+    image: image('photo-1506794778202-cad84cf45f1d'),
+  },
+  {
+    id: 'nd', category: 'filter', title: text('ND 减光镜', 'ND filter'), subtitle: text('白天长曝光与水流', 'Daylight long exposure and water'),
+    summary: text('白天光线太强时减少进光，让快门慢下来，把水流、云和人流变成连续的质感。', 'Cut daylight so the shutter can slow down and turn water, clouds, and people into texture.'),
+    useCases: [text('水流：在白天把快门拉到 1 秒或更长。', 'Water: reach one second or longer in daylight.'), text('移动人流：让行人变成轻微的动态痕迹，主体建筑保持清晰。', 'Crowds: turn people into a soft trace while architecture stays sharp.')],
+    image: image('photo-1433086966358-54859d0ed716'),
+  },
+  {
+    id: 'cpl', category: 'filter', title: text('CPL 偏振镜', 'CPL polarizer'), subtitle: text('水面、玻璃、树叶与天空', 'Water, glass, leaves, and sky'),
+    summary: text('转动偏振镜改变反光和天空对比，让你在拍摄现场就决定哪些反射应该留下。', 'Rotate the polarizer to manage reflections and sky contrast before the shutter is pressed.'),
+    useCases: [text('水面与玻璃：压低反光，看到表面下面的纹理。', 'Water and glass: reduce reflections to reveal texture beneath.'), text('树叶与天空：让湿润叶片更有层次，控制天空的偏振对比。', 'Leaves and sky: add depth to wet foliage and manage polarized contrast.')],
+    image: image('photo-1497250681960-ef046c08a56e'),
+  },
+];
+
+export type AdvancedCase = {
+  slug: string;
+  title: LocalizedText;
+  subtitle: LocalizedText;
+  summary: LocalizedText;
+  image: string;
+  settings: Array<{ label: LocalizedText; value: string }>;
+  shoot: LocalizedText[];
+  post: LocalizedText[];
+};
+
+export const advancedCases: AdvancedCase[] = [
+  {
+    slug: 'case-milky-way', title: text('山谷银河', 'Milky Way over a valley'), subtitle: text('一张图：对焦、曝光与前景关系', 'One frame: focus, exposure, and foreground'),
+    summary: text('让星空成为背景，让山谷把照片变成一个地方。', 'Keep the stars as context and let the valley make the frame a place.'), image: image('photo-1519681393784-d120267933ba'),
+    settings: [{ label: text('镜头', 'Lens'), value: 'NIKKOR Z 14-24mm f/2.8' }, { label: text('设置', 'Settings'), value: '14mm · f/2.8 · 15s · ISO 3200' }, { label: text('机位', 'Support'), value: '三脚架 + 2s 延时' }],
+    shoot: [text('天黑前完成构图，先把山谷和银河的位置安排好。', 'Compose before dark and place the valley and Milky Way together.'), text('放大取景手动对焦到最亮的星，再锁住对焦环。', 'Magnify the live view, focus manually on a bright star, then lock the ring.'), text('先拍一张测试，确认星点没有明显拖线，再固定曝光连续拍摄。', 'Make a test frame, check for star trails, then lock the exposure.')],
+    post: [text('只做基础降噪、白平衡和高光控制，不把银河拉成过饱和的白色。', 'Use basic noise reduction, white balance, and highlight control without oversaturating the Milky Way.'), text('前景太暗时单独拍一张蓝调前景，再用蒙版轻轻合并。', 'If the foreground is too dark, make a blue-hour frame and blend it gently with a mask.')],
+  },
+  {
+    slug: 'case-light-trails', title: text('高架车轨', 'Light trails under an overpass'), subtitle: text('一张图：等待车流形成方向', 'One frame: waiting for direction in traffic'),
+    summary: text('车不是主体，车灯形成的线条才是照片的节奏。', 'The cars are not the subject; their lines create the rhythm.'), image: image('photo-1519608487953-e999c86e7455'),
+    settings: [{ label: text('镜头', 'Lens'), value: '24mm' }, { label: text('设置', 'Settings'), value: 'f/8 · 8s · ISO 100' }, { label: text('机位', 'Support'), value: '低机位三脚架' }],
+    shoot: [text('先找安全位置，让道路从画面底部指向远处的建筑或灯光。', 'Choose a safe position and let the road lead toward distant architecture.'), text('用低 ISO 和小光圈开始，等车流完整经过再按下快门。', 'Start at low ISO and a small aperture, then release when traffic fills the path.'), text('连续拍几张，保留车流最完整、前景最干净的一张。', 'Make several frames and keep the cleanest, most complete flow.')],
+    post: [text('先校正透视，再压低高光和橙色灯光的饱和度。', 'Correct perspective first, then reduce highlights and orange saturation.'), text('只清理路边干扰，不用把所有车灯修成完全一致。', 'Remove edge distractions without making every light identical.')],
+  },
+  {
+    slug: 'case-focus-stack', title: text('桌面焦点合成', 'Tabletop focus stack'), subtitle: text('一张图：从前景到后景都清楚', 'One frame: sharp from front to back'),
+    summary: text('不是把光圈无限缩小，而是用多张焦点不同的照片换取整体清晰。', 'Do not stop down forever; trade several focus planes for complete sharpness.'), image: image('photo-1494438639946-1ebd1d20bf85'),
+    settings: [{ label: text('镜头', 'Lens'), value: '50mm Macro' }, { label: text('设置', 'Settings'), value: 'f/5.6 · 1/10s · ISO 100' }, { label: text('序列', 'Sequence'), value: '8 张，前 → 后' }],
+    shoot: [text('固定主体和机位，先标出最近和最远的清晰位置。', 'Lock the subject and camera, then mark the nearest and farthest focus planes.'), text('从前到后逐步移动焦点，每张保留足够重叠区域。', 'Move focus from front to back with enough overlap between frames.'), text('每次移动后等待震动消失，再触发下一张。', 'Let vibration settle after each move before triggering the next frame.')],
+    post: [text('在 Lightroom、Photoshop 或 Helicon Focus 对齐并自动混合。', 'Align and blend in Lightroom, Photoshop, or Helicon Focus.'), text('放大检查边缘，手工修掉透明物体和高反差位置的接缝。', 'Inspect edges at 100% and retouch seams around translucent or high-contrast areas.')],
+  },
+  {
+    slug: 'case-water', title: text('溪流长曝光', 'Stream long exposure'), subtitle: text('一张图：ND、稳定与水流节奏', 'One frame: ND, stability, and moving water'),
+    summary: text('用慢快门把水流从“瞬间”变成连续的线。', 'Use a slow shutter to turn a moment of water into continuous lines.'), image: image('photo-1433086966358-54859d0ed716'),
+    settings: [{ label: text('镜头', 'Lens'), value: 'NIKKOR Z 14-24mm' }, { label: text('设置', 'Settings'), value: '20mm · f/11 · 1.3s · ISO 64' }, { label: text('滤镜', 'Filter'), value: 'ND64 + CPL' }],
+    shoot: [text('先用 CPL 观察水面反光，再决定是否叠加 ND。', 'Rotate the CPL first, then decide whether to add ND.'), text('三脚架放低，前景找一条水流引导线，关闭防抖并用延时自拍。', 'Lower the tripod, find a leading line in the water, disable stabilisation, and use a timer.'), text('拍三到五张不同快门，选择水流最接近现场感觉的一张。', 'Make three to five shutter variations and keep the one that feels most like the scene.')],
+    post: [text('压住白色水花的高光，恢复岩石纹理，再统一冷暖。', 'Recover blown water highlights, restore rock texture, and balance the temperature.'), text('不要把水面磨成没有方向的白雾，保留流动的结构。', 'Do not turn the water into directionless white fog; keep its structure.')],
+  },
+];
