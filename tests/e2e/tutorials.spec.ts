@@ -70,6 +70,9 @@ test('equipment atlas switches categories and explains concrete use cases', asyn
 test('advanced tutorial switches complete shooting and post workflows', async ({ page }) => {
   await page.goto('/tutorials?category=advanced');
   await expect(page.getByRole('heading', { name: '从一张案例图到成片' })).toBeVisible();
+  for (const title of ['山谷银河', '高架车轨', '桌面焦点合成', '溪流长曝光', '日落延迟摄影', '云层间隔拍摄', '窗景 HDR 合成', '建筑像素合成']) {
+    await expect(page.getByRole('button', { name: new RegExp(title) })).toBeVisible();
+  }
   await expect(page.getByRole('button', { name: /山谷银河/ })).toHaveClass(/active/);
   await expect(page.getByText('14mm · f/2.8 · 15s · ISO 3200')).toBeVisible();
 

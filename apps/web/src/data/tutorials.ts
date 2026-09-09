@@ -39,7 +39,8 @@ const localImages: Record<string, string> = {
   'photo-1519608487953-e999c86e7455': '/tutorials/scenes/scene-traffic.jpg',
   'photo-1519681393784-d120267933ba': '/tutorials/scenes/scene-milky-way.jpg',
   'photo-1444703686981-a3abbc4d4fe3': '/tutorials/scenes/gear-gfx100s.jpg',
-  'photo-1449844908441-8829872d2607': '/tutorials/scenes/mountain-valley.jpg',
+  'photo-1449844908441-8829872d2607': '/tutorials/scenes/scene-architecture.jpg',
+  'photo-1497366811353-6870744d04b2': '/tutorials/scenes/scene-hdr.jpg',
   'photo-1470770841072-f978cf4d019e': '/tutorials/scenes/gear-tripod.jpg',
 };
 const image = (id: string, width = 1800): string => localImages[id] ?? `https://images.unsplash.com/${id}?auto=format&fit=crop&w=${width}&q=88`;
@@ -217,7 +218,7 @@ export const gearItems: GearItem[] = [
     id: 'z100-400', category: 'lens', title: text('NIKKOR Z 100-400mm', 'NIKKOR Z 100-400mm'), subtitle: text('远处雪景、山峰与动物', 'Distant snow, peaks, and wildlife'),
     summary: text('把远处的层次压缩到一起，站在安全距离也能把山峰和雪线拍得有力量。', 'Compress distant layers and fill the frame from a safe distance.'),
     useCases: [text('远处雪景：把山脊、雪线和光影压在同一张画面里。', 'Distant snow: layer ridges, snow lines, and light.'), text('山峰与动物：减少靠近主体的需要，等待更好的光线。', 'Peaks and wildlife: stay back and wait for better light.')],
-    image: image('photo-1464822759023-fed622ff2c3b'),
+    image: '/tutorials/scenes/gear-z100-400.jpg',
   },
   {
     id: 'z14-24', category: 'lens', title: text('NIKKOR Z 14-24mm f/2.8', 'NIKKOR Z 14-24mm f/2.8'), subtitle: text('大景、建筑与星空', 'Big scenes, architecture, and stars'),
@@ -229,7 +230,7 @@ export const gearItems: GearItem[] = [
     id: 'z50-18', category: 'lens', title: text('NIKKOR Z 50mm f/1.8', 'NIKKOR Z 50mm f/1.8'), subtitle: text('人像、街头与生活', 'Portraits, streets, and life'),
     summary: text('视角自然、光圈明亮，适合练习靠近主体、观察光线和建立关系。', 'A natural view and bright aperture for practising proximity, light, and connection.'),
     useCases: [text('人像：保持自然比例，开大光圈让背景安静下来。', 'Portraits: natural proportions with a quieter background.'), text('街头与生活：不夸张、不疏离，适合边走边观察。', 'Street and life: close to how the eye reads an everyday scene.')],
-    image: image('photo-1515886657613-9f3515b0c78f'),
+    image: '/tutorials/scenes/gear-z50-18.jpg',
   },
   {
     id: 'tripod', category: 'support', title: text('三脚架', 'Tripod'), subtitle: text('长曝光、光轨、星空与水流', 'Long exposure, trails, stars, and water'),
@@ -308,5 +309,33 @@ export const advancedCases: AdvancedCase[] = [
     settings: [{ label: text('镜头', 'Lens'), value: 'NIKKOR Z 14-24mm' }, { label: text('设置', 'Settings'), value: '20mm · f/11 · 1.3s · ISO 64' }, { label: text('滤镜', 'Filter'), value: 'ND64 + CPL' }],
     shoot: [text('先用 CPL 观察水面反光，再决定是否叠加 ND。', 'Rotate the CPL first, then decide whether to add ND.'), text('三脚架放低，前景找一条水流引导线，关闭防抖并用延时自拍。', 'Lower the tripod, find a leading line in the water, disable stabilisation, and use a timer.'), text('拍三到五张不同快门，选择水流最接近现场感觉的一张。', 'Make three to five shutter variations and keep the one that feels most like the scene.')],
     post: [text('压住白色水花的高光，恢复岩石纹理，再统一冷暖。', 'Recover blown water highlights, restore rock texture, and balance the temperature.'), text('不要把水面磨成没有方向的白雾，保留流动的结构。', 'Do not turn the water into directionless white fog; keep its structure.')],
+  },
+  {
+    slug: 'case-time-lapse', title: text('日落延迟摄影', 'Sunset time-lapse'), subtitle: text('一张图：固定曝光与光线变化', 'One sequence: locked exposure and changing light'),
+    summary: text('把一小时的光线变化压缩成一段有节奏的时间。', 'Compress an hour of changing light into a sequence with rhythm.'), image: image('photo-1470252649378-9c29740c9fa8'),
+    settings: [{ label: text('镜头', 'Lens'), value: 'NIKKOR Z 24-70mm' }, { label: text('设置', 'Settings'), value: '24mm · f/8 · 1/4s · ISO 100' }, { label: text('间隔', 'Interval'), value: '4s · 900 张' }],
+    shoot: [text('提前构图并锁定焦点、白平衡和曝光，避免画面逐张跳动。', 'Compose early and lock focus, white balance, and exposure to avoid flicker.'), text('设置间隔 4 秒，预留足够电量和存储空间覆盖整个日落。', 'Set a four-second interval and reserve enough battery and storage for the sunset.'), text('拍摄期间不要移动三脚架，结束后再检查序列是否完整。', 'Do not move the tripod during capture; check the sequence only after it finishes.')],
+    post: [text('统一裁切和曝光，删除开头、结尾的等待帧。', 'Apply one crop and exposure treatment, then remove waiting frames at either end.'), text('按 25fps 导入序列，必要时用轻微速度变化强调天空层次。', 'Import at 25fps and add a subtle speed change if the sky needs emphasis.')],
+  },
+  {
+    slug: 'case-interval', title: text('云层间隔拍摄', 'Cloud interval sequence'), subtitle: text('一张图：把变化留下来', 'One sequence: keeping change visible'),
+    summary: text('先得到稳定的一组照片，再决定它是延时、对比图还是时间档案。', 'Capture a stable sequence first, then decide whether it becomes motion, comparison, or an archive.'), image: image('photo-1500530855697-b586d89ba3ee'),
+    settings: [{ label: text('镜头', 'Lens'), value: 'NIKKOR Z 14-24mm' }, { label: text('设置', 'Settings'), value: '20mm · f/5.6 · 1/125s · ISO 100' }, { label: text('间隔', 'Interval'), value: '10s · 240 张' }],
+    shoot: [text('先确定变化的主体，是云、植物还是人流，并让构图留出方向。', 'Choose the changing subject first and leave room for its direction.'), text('手动对焦并关闭自动 ISO，保证每张照片的视觉关系一致。', 'Use manual focus and disable Auto ISO so every frame shares the same visual relationship.'), text('记录开始和结束时间，保留原始序列与拍摄参数。', 'Record start and end times, and keep the original sequence with its settings.')],
+    post: [text('筛掉误触、曝光跳动和明显遮挡的帧，保持序列连续。', 'Remove accidental, flickering, or obstructed frames while keeping continuity.'), text('可导出为延时视频，也可挑选首尾帧做变化对比。', 'Export a time-lapse video or compare the first and last frames as stills.')],
+  },
+  {
+    slug: 'case-hdr', title: text('窗景 HDR 合成', 'Window-view HDR'), subtitle: text('一张图：把高光和暗部放在一起', 'One frame: holding highlights and shadows together'),
+    summary: text('同一机位拍三张不同曝光，让窗外天空和室内细节同时保留。', 'Make three exposures from one locked position so sky and interior detail survive together.'), image: image('photo-1497366811353-6870744d04b2'),
+    settings: [{ label: text('镜头', 'Lens'), value: 'NIKKOR Z 24-70mm' }, { label: text('设置', 'Settings'), value: '35mm · f/5.6 · ISO 100' }, { label: text('序列', 'Sequence'), value: '-2 / 0 / +2 EV' }],
+    shoot: [text('固定相机和焦点，只改变快门或曝光补偿，避免景深变化。', 'Lock the camera and focus; change shutter or compensation only.'), text('先拍最亮的天空，再拍中间曝光和室内暗部，确保三张都有可用细节。', 'Capture the bright sky, the middle exposure, and the interior shadows so each frame has useful detail.'), text('等待人物和树叶等移动元素稳定，减少合成时的重影。', 'Wait for people and leaves to settle to reduce ghosting during the merge.')],
+    post: [text('先自动对齐，再用自然过渡保留窗框和边缘，不要过度拉 HDR 效果。', 'Align first, then blend naturally around the window frame without pushing the HDR look.'), text('最后统一白平衡和局部对比，让室内外光线关系可信。', 'Finish with one white balance and local contrast pass so the interior and exterior feel believable.')],
+  },
+  {
+    slug: 'case-pixel-shift', title: text('建筑像素合成', 'Pixel-shift architecture'), subtitle: text('一张图：把静态细节拍完整', 'One frame: resolving static detail'),
+    summary: text('让传感器移动或连续采集多张画面，把建筑纹理和细线条拍得更完整。', 'Use a sensor-shift sequence to resolve architectural texture and fine lines more completely.'), image: image('photo-1449844908441-8829872d2607'),
+    settings: [{ label: text('镜头', 'Lens'), value: 'NIKKOR Z 24-70mm' }, { label: text('设置', 'Settings'), value: '50mm · f/8 · 1/4s · ISO 64' }, { label: text('序列', 'Sequence'), value: '8 张像素移位' }],
+    shoot: [text('选择没有风、人流和震动的时段，确保建筑和细小纹理保持静止。', 'Choose a windless, quiet moment so architecture and fine texture stay still.'), text('用坚固三脚架固定机位，关闭可能引起震动的防抖设置。', 'Lock the camera on a solid tripod and disable stabilisation that could introduce movement.'), text('按机身支持的像素移位序列拍摄，不要在过程中触碰脚架。', 'Run the camera-supported pixel-shift sequence without touching the tripod.')],
+    post: [text('在相机软件或 RAW 软件中合成，检查边缘线条是否完整。', 'Merge in the camera or RAW software and inspect the edges of fine lines.'), text('只做基础锐化和透视校正，保留建筑材质的自然过渡。', 'Use only light sharpening and perspective correction to keep natural material transitions.')],
   },
 ];
