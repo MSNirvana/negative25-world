@@ -65,6 +65,7 @@ onBeforeUnmount(() => { window.removeEventListener('click', closeMenu); if (user
       </div>
       <nav ref="navRoot" class="utility-nav" :aria-label="t('header.siteLinks')">
         <div class="menu-item"><button :aria-expanded="activeMenu === 'users'" @click.stop="toggleMenu('users')"><Search :size="14" /> {{ t('header.searchUsers') }}</button><div v-if="activeMenu === 'users'" class="menu-popover user-search-popover"><form @submit.prevent="searchUsers"><label class="user-search-field"><Search :size="14" /><input v-model="userQuery" :placeholder="t('header.searchUsersPlaceholder')" :aria-label="t('header.searchUsers')" @input="searchUsers" /></label></form><p v-if="userSearchLoading" class="search-status">{{ t('header.searchUsersLoading') }}</p><p v-else-if="userSearchError" class="search-status">{{ t('header.searchUsersEmpty') }}</p><p v-else-if="userQuery.trim() && !userResults.length" class="search-status">{{ t('header.searchUsersEmpty') }}</p><div v-else class="user-results"><button v-for="user in userResults" :key="user.username" type="button" class="user-result" :aria-label="t('header.openUserProfile', { username: user.username })" @click="openUserProfile(user.username)"><span class="user-result-avatar">{{ (user.displayName || user.username).slice(0, 1).toUpperCase() }}</span><span><strong>{{ user.displayName || `@${user.username}` }}</strong><small>@{{ user.username }}<template v-if="user.location"> · {{ user.location }}</template></small></span></button></div></div></div>
+        <button class="site-link" :class="{ active: route.path.startsWith('/tutorials') }" @click="router.push('/tutorials')">{{ t('header.tutorials') }}</button>
         <div class="menu-item"><button :aria-expanded="activeMenu === 'about'" @click.stop="toggleMenu('about')">{{ t('header.about') }}</button><div v-if="activeMenu === 'about'" class="menu-popover"><strong>{{ t('header.aboutTitle') }}</strong><p>{{ t('header.aboutDescription') }}</p><a href="/about">{{ t('header.readStory') }} <span>↗</span></a></div></div>
         <button class="studio-link" :class="{ active: route.path.startsWith('/admin') || route.path.startsWith('/account') }" :aria-label="t('account.personalCenter')" @click="router.push('/account')">{{ t('account.personalCenter') }}</button>
         <ThemeSwitcher />
@@ -78,9 +79,9 @@ onBeforeUnmount(() => { window.removeEventListener('click', closeMenu); if (user
 .header { margin: var(--header-top) 0 var(--header-bottom); max-width: none; padding: 0 40px; position: relative; z-index: 10; }
 .header-map { left: 0; margin: 0; max-width: none; padding: 0; position: absolute; right: 0; top: 0; }
 .header-map .header-inner { margin-top: var(--header-top); padding-left: 40px; padding-right: 40px; }
-.header-map .brand, .header-map .utility-nav a, .header-map .utility-nav > .menu-item > button, .header-map .studio-link { color: var(--map-header-ink); }
+.header-map .brand, .header-map .utility-nav a, .header-map .utility-nav > .menu-item > button, .header-map .site-link, .header-map .studio-link { color: var(--map-header-ink); }
 .header-map .brand-type small { color: var(--map-muted); }
-.header-map .utility-nav a:hover, .header-map .utility-nav > .menu-item > button:hover, .header-map .studio-link:hover, .header-map .studio-link.active { background: var(--map-control-hover); color: var(--map-ink); }
+.header-map .utility-nav a:hover, .header-map .utility-nav > .menu-item > button:hover, .header-map .site-link:hover, .header-map .site-link.active, .header-map .studio-link:hover, .header-map .studio-link.active { background: var(--map-control-hover); color: var(--map-ink); }
 .header-map :deep(.theme-trigger), .header-map :deep(.language-trigger) { color: var(--map-header-ink); }
 .header-map :deep(.theme-trigger:hover), .header-map :deep(.theme-trigger[aria-expanded='true']), .header-map :deep(.language-trigger:hover), .header-map :deep(.language-trigger[aria-expanded='true']) { background: var(--map-control-hover); color: var(--map-ink); }
 .header-map .brand { visibility: hidden; }
@@ -93,8 +94,8 @@ onBeforeUnmount(() => { window.removeEventListener('click', closeMenu); if (user
 .brand { align-items: center; background: transparent; color: var(--ink); display: inline-flex; justify-content: center; padding: 0; }
 .utility-nav { align-items: center; display: flex; flex: 0 0 auto; gap: 4px; margin-left: auto; margin-right: 215px; }
 .menu-item { position: relative; }
-.utility-nav a, .utility-nav > .menu-item > button, .studio-link { background: transparent; border-radius: 4px; color: var(--muted); font-size: 13px; padding: 10px 12px; white-space: nowrap; }
-.utility-nav a:hover, .utility-nav > .menu-item > button:hover, .studio-link:hover, .studio-link.active { background: var(--surface-soft); color: var(--ink); }
+.utility-nav a, .utility-nav > .menu-item > button, .site-link, .studio-link { background: transparent; border-radius: 4px; color: var(--muted); font-size: 13px; padding: 10px 12px; white-space: nowrap; }
+.utility-nav a:hover, .utility-nav > .menu-item > button:hover, .site-link:hover, .site-link.active, .studio-link:hover, .studio-link.active { background: var(--surface-soft); color: var(--ink); }
 .menu-popover { background: color-mix(in srgb, var(--surface) 97%, var(--paper)); border: 1px solid var(--line); border-radius: 8px; box-shadow: var(--shadow); color: var(--ink); display: grid; gap: 9px; min-width: 230px; padding: 16px; position: absolute; right: 0; top: calc(100% + 8px); z-index: 20; }
 .menu-popover strong { font-family: Georgia, ui-serif, serif; font-size: 15px; font-weight: 500; line-height: 1.25; }
 .menu-popover p { color: var(--muted); font-size: 12px; line-height: 1.5; margin: 0; white-space: normal; }
@@ -125,7 +126,7 @@ onBeforeUnmount(() => { window.removeEventListener('click', closeMenu); if (user
   .header-start :deep(.category-bar.is-inline) { width: 100%; }
   .utility-nav { gap: 0; margin-left: -12px; margin-right: 0; max-width: calc(100vw - 32px); min-width: 0; overflow-x: auto; padding-bottom: 2px; scrollbar-width: none; }
   .utility-nav::-webkit-scrollbar { display: none; }
-  .utility-nav a, .utility-nav > .menu-item > button, .studio-link { font-size: 12px; padding: 7px 12px; }
+  .utility-nav a, .utility-nav > .menu-item > button, .site-link, .studio-link { font-size: 12px; padding: 7px 12px; }
   .menu-popover { left: 0; max-width: calc(100vw - 32px); right: auto; top: calc(100% + 8px); }
   .user-search-popover { min-width: min(280px, calc(100vw - 32px)); }
 }

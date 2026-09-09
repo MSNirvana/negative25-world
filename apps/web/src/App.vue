@@ -21,7 +21,8 @@ const router = useRouter();
 const isPhoto = computed(() => route.path.startsWith('/photo/'));
 const isAdmin = computed(() => route.path.startsWith('/admin') || route.path.startsWith('/account'));
 const isDiscover = computed(() => route.path.startsWith('/discover'));
-const isPublic = computed(() => !isAdmin.value && !isPhoto.value);
+const isTutorial = computed(() => route.path.startsWith('/tutorials'));
+const isPublic = computed(() => !isAdmin.value && !isPhoto.value && !isTutorial.value);
 const scrolled = ref(false);
 function onScroll(): void { scrolled.value = window.scrollY > 80; }
 function selectView(value: 'gallery' | 'discover'): void { void router.push({ path: value === 'discover' ? '/discover' : '/', query: route.query }); }

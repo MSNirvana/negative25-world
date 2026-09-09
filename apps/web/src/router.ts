@@ -15,6 +15,7 @@ import AdminAlbumsView from './views/admin/AdminAlbumsView.vue';
 import AdminProfileView from './views/admin/AdminProfileView.vue';
 import PublicProfileView from './views/PublicProfileView.vue';
 import AuthRegisterView from './views/AuthRegisterView.vue';
+import TutorialsView from './views/TutorialsView.vue';
 import { isApiConfigured } from './api/client';
 
 function requireAdminSession(to: { fullPath: string }): true | { name: string; query: { redirect: string } } {
@@ -36,6 +37,8 @@ export const router = createRouter({
     { path: '/discover', name: 'discover', component: DiscoverView },
     { path: '/discover/:slug', name: 'discover-place', component: DiscoverView, props: true },
     { path: '/about', name: 'about', component: AboutView },
+    { path: '/tutorials', name: 'tutorials', component: TutorialsView },
+    { path: '/tutorials/:slug', name: 'tutorial-detail', component: TutorialsView, props: true },
     { path: '/albums', name: 'albums', component: AlbumsView },
     { path: '/album/:id', name: 'album', component: AlbumView, props: true },
     { path: '/auth/login', name: 'auth-login', component: AdminLoginView },
