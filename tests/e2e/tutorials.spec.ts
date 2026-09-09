@@ -14,16 +14,12 @@ test('basic tutorial is one complete interactive photography lab', async ({ page
 
   const camera = page.getByTestId('camera-360');
   await expect(camera).toBeVisible();
-  await expect(camera).toHaveAttribute('data-rendered', 'true');
-  const box = await camera.boundingBox();
-  expect(box).not.toBeNull();
-  if (box) {
-    await page.mouse.move(box.x + box.width * 0.72, box.y + box.height * 0.5);
-    await page.mouse.down();
-    await page.mouse.move(box.x + box.width * 0.28, box.y + box.height * 0.45, { steps: 8 });
-    await page.mouse.up();
-  }
-  await expect(camera).toHaveAttribute('data-interacted', 'true');
+  const realModel = camera.locator('iframe');
+  await expect(realModel).toBeVisible();
+  await expect(realModel).toHaveAttribute('src', /93775837f09141fd91bf1b41a0c0953e/);
+  await expect(realModel).toHaveAttribute('title', '可拖动旋转的 Nikon Z6 相机与镜头');
+  await expect(camera.getByText('Nikon Z6 · NIKKOR 24–70mm f/4')).toBeVisible();
+  await expect(camera.getByText(/3D model by Metazeon · CC BY 4\.0/)).toBeVisible();
 
   await expect(page.getByRole('slider')).toHaveCount(7);
   for (const name of ['光圈', '快门', '感光度', '曝光补偿', '焦距', '对焦位置', '白平衡']) {

@@ -115,7 +115,7 @@ onMounted(() => { if (selectedTutorial.value) window.scrollTo({ top: 0, behavior
     <template v-else>
       <header class="tutorial-intro">
         <div class="intro-copy"><span class="eyebrow"><BookOpen :size="13" /> {{ t('tutorials.eyebrow') }}</span><h1 :aria-label="t('tutorials.title')"><span>{{ t('tutorials.titleLead') }}</span><span>{{ t('tutorials.titleTail') }}</span></h1><p>{{ t('tutorials.description') }}</p></div>
-        <div class="intro-image"><CameraModelViewer :label="t('tutorials.imageAlt')" fallback-src="/tutorials/nikon-z6iii-cutout.png" /></div>
+        <div class="intro-image"><CameraModelViewer :label="t('tutorials.imageAlt')" fallback-src="/tutorials/nikon-z6-24-70-poster.jpeg" /></div>
       </header>
 
       <nav class="tutorial-filters" :aria-label="t('tutorials.categories')">
